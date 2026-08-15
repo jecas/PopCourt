@@ -1,24 +1,25 @@
 import { useState } from "react";
-import { LogIn } from "lucide-react";
+import { LogIn, MailCheck } from "lucide-react";
 import { TOKENS, card } from "../constants";
 
 export default function LoginBox({ onSignIn, onSignUp }) {
   const [mode, setMode] = useState("login");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [fullName, setFullName] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
 
   const submitLogin = async () => {
     setErr("");
-    if (!username.trim() || !password) { setErr("Popunite korisničko ime i lozinku."); return; }
+    if (!email.trim() || !password) { setErr("Popunite email i lozinku."); return; }
     setBusy(true);
     try {
-      await onSignIn({ username, password });
+      await onSignIn({ email, password });
     } catch (e) {
-      setErr(e.message === "Invalid login credentials" ? "Pogrešno korisničko ime ili lozinka." : e.message);
+      setErr(e.message === "Invalid login credentials" ? "Pogrešan email ili lozinka (ili nalog još nije potvrđen preko mejla)." : e.message);
     } finally {
       setBusy(false);
     }
@@ -26,18 +27,36 @@ export default function LoginBox({ onSignIn, onSignUp }) {
 
   const submitRegister = async () => {
     setErr("");
-    if (!username.trim() || !password || !fullName.trim()) { setErr("Popunite sva polja."); return; }
+    if (!email.trim() || !password || !fullName.trim()) { setErr("Popunite sva polja."); return; }
     if (password.length < 6) { setErr("Lozinka mora imati bar 6 karaktera."); return; }
     if (password !== password2) { setErr("Lozinke se ne poklapaju."); return; }
     setBusy(true);
     try {
-      await onSignUp({ username, password, fullName });
+      await onSignUp({ email, password, fullName });
+      setJustRegistered(true);
     } catch (e) {
-      setErr(e.message.includes("already registered") ? "To korisničko ime je zauzeto." : e.message);
+      setErr(e.message.includes("already registered") ? "Nalog sa tim mejlom već postoji." : e.message);
     } finally {
       setBusy(false);
     }
   };
+
+  if (justRegistered) {
+    return (
+      <div style={{ ...card, maxWidth: 380 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: TOKENS.green }}>
+          <MailCheck size={20} />
+          <strong style={{ fontSize: 15 }}>Proveri svoj mejl</strong>
+        </div>
+        <p style={{ fontSize: 13, color: "#6B6A63", margin: 0 }}>
+          Poslali smo ti mejl za potvrdu naloga na <strong>{email}</strong>. Klikni na link u mejlu, pa se vrati ovde i uloguj se.
+        </p>
+        <button onClick={() => { setJustRegistered(false); setMode("login"); setPassword(""); setPassword2(""); }} style={{ marginTop: 14, background: "none", border: "none", color: TOKENS.green, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+          Nazad na prijavu
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...card, maxWidth: 380 }}>
@@ -54,8 +73,8 @@ export default function LoginBox({ onSignIn, onSignUp }) {
         </button>
       </div>
 
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Korisničko ime</label>
-      <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="npr. ana.anic"
+      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Email</label>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="npr. ana@primer.com"
         style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
 
       {mode === "register" && (
