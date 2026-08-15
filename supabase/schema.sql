@@ -15,7 +15,8 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Automatski napravi profil kad se neko registruje (username/full_name dolaze iz signUp metadata)
+-- Automatski napravi profil kad se neko registruje.
+-- Korisničko ime se ne unosi posebno — uvek je isto što i email sa kojim se korisnik registrovao.
 create function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -25,7 +26,7 @@ begin
   insert into public.profiles (id, username, full_name)
   values (
     new.id,
-    new.raw_user_meta_data ->> 'username',
+    new.email,
     new.raw_user_meta_data ->> 'full_name'
   );
   return new;
