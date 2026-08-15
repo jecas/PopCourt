@@ -1,25 +1,21 @@
 import { supabase } from "./supabaseClient";
 
-// Supabase Auth traži email, a prijava na sajtu radi na "korisničko ime".
-// Zato pravimo pomoćni email oblika korisnicko.ime@popcourt.local koji se nikad ne šalje niti prikazuje.
-const FAKE_EMAIL_DOMAIN = "popcourt.local";
-const usernameToEmail = (username) => `${username.trim().toLowerCase()}@${FAKE_EMAIL_DOMAIN}`;
-
 // ---------- Auth ----------
+// Korisničko ime u profilu je uvek isto što i email (postavlja ga baza automatski, vidi supabase/schema.sql).
 
-export async function signUp({ username, password, fullName }) {
+export async function signUp({ email, password, fullName }) {
   const { data, error } = await supabase.auth.signUp({
-    email: usernameToEmail(username),
+    email: email.trim().toLowerCase(),
     password,
-    options: { data: { username: username.trim(), full_name: fullName.trim() } },
+    options: { data: { full_name: fullName.trim() } },
   });
   if (error) throw error;
   return data;
 }
 
-export async function signIn({ username, password }) {
+export async function signIn({ email, password }) {
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: usernameToEmail(username),
+    email: email.trim().toLowerCase(),
     password,
   });
   if (error) throw error;
