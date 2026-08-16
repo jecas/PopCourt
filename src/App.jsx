@@ -23,7 +23,7 @@ const BOOKING_WINDOW_DAYS = 14;
 export default function App() {
   const { lang, setLang, t } = useLang();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tab, setTab] = useState("results");
+  const [tab, setTab] = useState("home");
   const [refereeMode, setRefereeMode] = useState(false);
 
   const [session, setSession] = useState(null);
@@ -107,6 +107,11 @@ export default function App() {
       supabase.removeChannel(bookingsCh);
     };
   }, [refreshMatches, refreshDraw, refreshBookings]);
+  
+  // ---------- document title (per section/language, helps browser tabs & shared links) ----------
+  useEffect(() => {
+    document.title = tab === "home" ? t("home.title") : `${t(`nav.${tab}`)} — PopCourt`;
+  }, [tab, lang, t]);
 
   // ---------- handlers ----------
   const handleSignIn = async (creds) => { await api.signIn(creds); };
