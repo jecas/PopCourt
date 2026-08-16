@@ -3,7 +3,7 @@ import {
   Menu, X, RadioTower, Trophy, MapPin, Phone, ChevronRight, Lock, LogIn, LogOut,
 } from "lucide-react";
 
-import { TOKENS, NAV_ITEMS, card } from "./constants";
+import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, card } from "./constants";
 import { dateKey } from "./lib/utils";
 import * as api from "./lib/api";
 import { supabase } from "./lib/supabaseClient";
@@ -215,6 +215,30 @@ export default function App() {
             ) : (
               <p style={{ fontSize: 13, color: "#8B8A80" }}>Žreb za naredni turnir još nije objavljen.</p>
             )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "26px 0 10px" }}>
+              <MapPin size={18} color={TOKENS.clay} />
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Lokacija</h2>
+            </div>
+            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+              <iframe
+                title="Lokacija terena"
+                src={`https://www.google.com/maps?q=${encodeURIComponent(CLUB_ADDRESS)}&output=embed`}
+                width="100%"
+                height="320"
+                style={{ border: 0, display: "block" }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CLUB_ADDRESS)}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: TOKENS.green, fontWeight: 600 }}
+            >
+              Otvori u Google Maps →
+            </a>
           </section>
         )}
 
