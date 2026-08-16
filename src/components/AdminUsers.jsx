@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, AlertCircle } from "lucide-react";
 import { TOKENS, card } from "../constants";
 import { useLang } from "../lib/i18n.jsx";
 import * as api from "../lib/api";
@@ -10,7 +10,12 @@ function UserRow({ u, onSave }) {
   const [role, setRole] = useState(u.role);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = credits !== u.credits || role !== u.role;
+  const dirty = Number(credits) !== Number(u.credits) || role !== u.role;
+
+  useEffect(() => {
+    setCredits(u.credits);
+    setRole(u.role);
+  }, [u.credits, u.role]);
 
   const save = async () => {
     setBusy(true);
@@ -41,9 +46,14 @@ function UserRow({ u, onSave }) {
       </td>
       <td style={{ padding: "8px 10px" }}>
         {dirty && (
-          <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 6, border: `1px solid ${TOKENS.green}`, background: TOKENS.green, color: "#fff", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
-            {t("adminUsers.save")}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: TOKENS.clay, fontWeight: 600 }}>
+              <AlertCircle size={12} /> {t("adminUsers.unsaved")}
+            </span>
+            <button onClick={save} disabled={busy} style={{ fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 6, border: `1px solid ${TOKENS.green}`, background: TOKENS.green, color: "#fff", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+              {t("adminUsers.save")}
+            </button>
+          </div>
         )}
         {saved && !dirty && <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: TOKENS.green, fontWeight: 600 }}><Check size={13} /> {t("adminUsers.saved")}</span>}
       </td>
