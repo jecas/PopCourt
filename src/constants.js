@@ -3,7 +3,7 @@ export const TOKENS = {
   chalk: "#F6F2E9", ball: "#C7DE2E", ink: "#1B1F1C", navy: "#223354", line: "#E4DCC9",
 };
 
-export const NAV_ITEMS = ["Naslovna", "Rezultati uživo", "Žreb", "Rezervacija terena", "Cenovnik"];
+export const NAV_ITEMS = ["home", "results", "draw", "booking", "prices"];
 
 export const CLUB_ADDRESS = "Hipodrom, Bavaništanski put bb, Pančevo";
 export const MAP_QUERY = "Tenis centar PopCourt, Hipodrom, Bavaništanski put bb, Pančevo";
