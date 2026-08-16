@@ -12,8 +12,31 @@ create table public.profiles (
   username text unique not null,
   full_name text not null,
   role text not null default 'player' check (role in ('player', 'coach', 'referee', 'admin')),
+  credits numeric(6, 1) not null default 0,
+  phone text,
+  birth_date date,
   created_at timestamptz not null default now()
 );
+
+-- Zaštita: kredite i ulogu sme da menja SAMO admin, bez obzira ko šalje UPDATE
+create function public.protect_privileged_profile_fields()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if (new.credits is distinct from old.credits or new.role is distinct from old.role) then
+    if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
+      raise exception 'Samo admin moze da menja kredite ili ulogu.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger protect_privileged_profile_fields
+  before update on public.profiles
+  for each row execute procedure public.protect_privileged_profile_fields();
 
 -- Automatski napravi profil kad se neko registruje.
 -- Korisničko ime se ne unosi posebno — uvek je isto što i email sa kojim se korisnik registrovao.
@@ -38,22 +61,42 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- ============================================================
+-- CLUB SETTINGS (adresa/telefon — menja admin kroz sajt)
+-- ============================================================
+create table public.club_settings (
+  id int primary key default 1,
+  name text not null default 'Teniski i padel centar',
+  address text not null,
+  phone text not null,
+  updated_at timestamptz not null default now(),
+  constraint club_settings_single_row check (id = 1)
+);
+
+insert into public.club_settings (id, name, address, phone) values (
+  1,
+  'Teniski i padel centar',
+  'Hipodrom, Bavaništanski put bb, Pančevo',
+  '060/3622-226'
+);
+
+-- ============================================================
 -- COURTS
 -- ============================================================
 create table public.courts (
   id serial primary key,
   name text not null,
+  sport text not null default 'Tenis' check (sport in ('Tenis', 'Padel')),
   sort_order int not null
 );
 
-insert into public.courts (name, sort_order) values
-  ('Teren 1 (tvrda, hala)', 1),
-  ('Teren 2 (tvrda, hala)', 2),
-  ('Teren 3 (šljaka)', 3),
-  ('Teren 4 (šljaka)', 4),
-  ('Teren 5 (šljaka)', 5),
-  ('Padel 1', 6),
-  ('Padel 2', 7);
+insert into public.courts (name, sport, sort_order) values
+  ('Teren 1 (tvrda, hala)', 'Tenis', 1),
+  ('Teren 2 (tvrda, hala)', 'Tenis', 2),
+  ('Teren 3 (šljaka)', 'Tenis', 3),
+  ('Teren 4 (šljaka)', 'Tenis', 4),
+  ('Teren 5 (šljaka)', 'Tenis', 5),
+  ('Padel 1', 'Padel', 6),
+  ('Padel 2', 'Padel', 7);
 
 -- ============================================================
 -- MATCHES (rezultati uživo)
@@ -68,6 +111,9 @@ create table public.matches (
   status text not null default 'scheduled' check (status in ('scheduled', 'live', 'finished')),
   scheduled_time text,
   sets jsonb not null default '[]'::jsonb,
+  draw_id uuid, -- FK dodat posle DRAWS tabele ispod (draws jos ne postoji ovde)
+  round_index int,
+  match_index int,
   updated_at timestamptz not null default now()
 );
 
@@ -82,6 +128,8 @@ create table public.draws (
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
+
+alter table public.matches add constraint matches_draw_id_fkey foreign key (draw_id) references public.draws(id);
 
 -- ============================================================
 -- BOOKINGS (rezervacije terena)
@@ -108,10 +156,22 @@ create table public.bookings (
 -- ROW LEVEL SECURITY
 -- ============================================================
 alter table public.profiles enable row level security;
+alter table public.club_settings enable row level security;
 alter table public.courts enable row level security;
 alter table public.matches enable row level security;
 alter table public.draws enable row level security;
 alter table public.bookings enable row level security;
+
+-- club_settings
+create policy "podesavanja su javno vidljiva"
+  on public.club_settings for select
+  using (true);
+
+create policy "samo admin menja podesavanja"
+  on public.club_settings for update
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
 
 -- profiles
 create policy "profiles su vidljivi ulogovanim korisnicima"
@@ -121,6 +181,12 @@ create policy "profiles su vidljivi ulogovanim korisnicima"
 create policy "korisnik menja samo svoj profil"
   on public.profiles for update
   using (auth.uid() = id);
+
+create policy "admin upravlja svim profilima"
+  on public.profiles for update
+  using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  );
 
 -- courts
 create policy "tereni su javno vidljivi"
@@ -164,24 +230,141 @@ create policy "treneri i admin azuriraju zreb"
     exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('coach', 'admin'))
   );
 
--- bookings — svi ulogovani vide zauzeća, svako pravi/otkazuje samo svoju rezervaciju
+-- bookings — svi ulogovani vide zauzeća; kreiranje/otkazivanje ide isključivo
+-- kroz book_court()/cancel_booking() funkcije (troše/vraćaju kredite atomično),
+-- zato nema insert/delete RLS politike — direktan insert/delete sa klijenta je odbijen.
 create policy "ulogovani vide sve rezervacije"
   on public.bookings for select
   using (auth.role() = 'authenticated');
 
-create policy "korisnik pravi svoju rezervaciju najkasnije 1h unapred"
-  on public.bookings for insert
-  with check (
-    auth.uid() = user_id
-    and (booking_date + (start_hour || ' hours')::interval) - now() >= interval '1 hour'
+create function public.book_court(
+  p_court_id int,
+  p_booking_date date,
+  p_start_hour numeric,
+  p_duration numeric
+)
+returns public.bookings
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_credits numeric;
+  v_booking public.bookings;
+begin
+  if (p_booking_date + (p_start_hour || ' hours')::interval) - now() < interval '1 hour' then
+    raise exception 'Termin mora biti rezervisan najkasnije 1h unapred.';
+  end if;
+
+  select credits into v_credits from public.profiles where id = auth.uid() for update;
+  if v_credits is null then
+    raise exception 'Profil nije pronađen.';
+  end if;
+  if v_credits < p_duration then
+    raise exception 'Nemate dovoljno kredita za ovaj termin (potrebno % , dostupno %).', p_duration, v_credits;
+  end if;
+
+  insert into public.bookings (court_id, booking_date, start_hour, duration, user_id)
+  values (p_court_id, p_booking_date, p_start_hour, p_duration, auth.uid())
+  returning * into v_booking;
+
+  update public.profiles set credits = credits - p_duration where id = auth.uid();
+
+  return v_booking;
+end;
+$$;
+
+create function public.cancel_booking(p_booking_id uuid)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_booking public.bookings;
+begin
+  select * into v_booking from public.bookings where id = p_booking_id;
+  if v_booking is null then
+    raise exception 'Rezervacija ne postoji.';
+  end if;
+  if v_booking.user_id <> auth.uid() then
+    raise exception 'Možete otkazati samo svoju rezervaciju.';
+  end if;
+  if (v_booking.booking_date + (v_booking.start_hour || ' hours')::interval) - now() < interval '24 hours' then
+    raise exception 'Termin se ne može otkazati manje od 24h unapred.';
+  end if;
+
+  delete from public.bookings where id = p_booking_id;
+  update public.profiles set credits = credits + v_booking.duration where id = auth.uid();
+end;
+$$;
+
+-- Zavrsi mec i automatski upisi pobednika u sledece kolo zreba (ako je mec vezan za zreb)
+create function public.finish_match(p_match_id uuid, p_sets jsonb)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_match public.matches;
+  v_draw public.draws;
+  v_p1_sets int := 0;
+  v_p2_sets int := 0;
+  v_set jsonb;
+  v_winner text;
+  v_rounds jsonb;
+  v_next_round int;
+  v_next_index int;
+  v_slot_key text;
+begin
+  if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('referee', 'admin')) then
+    raise exception 'Samo sudije i admin mogu da zavrse mec.';
+  end if;
+
+  update public.matches
+  set status = 'finished', sets = p_sets, updated_at = now()
+  where id = p_match_id
+  returning * into v_match;
+
+  if v_match.draw_id is null then
+    return;
+  end if;
+
+  for v_set in select * from jsonb_array_elements(p_sets)
+  loop
+    if (v_set->>0)::int > (v_set->>1)::int then
+      v_p1_sets := v_p1_sets + 1;
+    elsif (v_set->>1)::int > (v_set->>0)::int then
+      v_p2_sets := v_p2_sets + 1;
+    end if;
+  end loop;
+
+  if v_p1_sets = v_p2_sets then
+    return;
+  end if;
+
+  v_winner := case when v_p1_sets > v_p2_sets then v_match.player1 else v_match.player2 end;
+
+  select * into v_draw from public.draws where id = v_match.draw_id;
+  if v_draw is null then
+    return;
+  end if;
+
+  v_next_round := v_match.round_index + 1;
+  v_next_index := v_match.match_index / 2;
+  v_slot_key := case when v_match.match_index % 2 = 0 then 'a' else 'b' end;
+
+  if jsonb_array_length(v_draw.rounds) <= v_next_round then
+    return;
+  end if;
+
+  v_rounds := jsonb_set(
+    v_draw.rounds,
+    array[v_next_round::text, v_next_index::text, v_slot_key],
+    to_jsonb(v_winner)
   );
 
-create policy "korisnik otkazuje svoju rezervaciju najkasnije 24h unapred"
-  on public.bookings for delete
-  using (
-    auth.uid() = user_id
-    and (booking_date + (start_hour || ' hours')::interval) - now() >= interval '24 hours'
-  );
+  update public.draws set rounds = v_rounds where id = v_draw.id;
+end;
+$$;
 
 -- ============================================================
 -- REALTIME — omogući live ažuriranje rezultata, rezervacija i žreba
@@ -189,6 +372,7 @@ create policy "korisnik otkazuje svoju rezervaciju najkasnije 24h unapred"
 alter publication supabase_realtime add table public.matches;
 alter publication supabase_realtime add table public.bookings;
 alter publication supabase_realtime add table public.draws;
+alter publication supabase_realtime add table public.club_settings;
 
 -- ============================================================
 -- Primer mečeva za probu (opciono, obriši ako ne trebaju)
