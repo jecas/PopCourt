@@ -11,7 +11,12 @@ export function hoursUntil(dateStr, hour) {
 }
 
 export function dateKey(d) {
-  return d.toISOString().slice(0, 10);
+  // Namerno NE koristi toISOString() — ono konvertuje u UTC, pa bi u
+  // vremenskim zonama ispred UTC (npr. Srbija) datum ponoći bio "juce".
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function fmtDay(d, dayNames) {
