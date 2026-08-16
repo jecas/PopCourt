@@ -386,3 +386,92 @@ export default function App() {
 
         {tab === "draw" && (
           <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("draw.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>
+              {t("draw.subtitle")}
+            </p>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !canManageDraw ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("draw.restricted")}</p> :
+              <DrawTool user={user} draw={draw} onGenerate={handleGenerateDraw} onPublish={handlePublishDraw} />}
+          </section>
+        )}
+
+        {tab === "booking" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 18px" }}>{t("booking.title")}</h2>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !user ? <LoginBox onSignIn={handleSignIn} onSignUp={handleSignUp} onForgotPassword={handleForgotPassword} /> :
+              !dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              <BookingCalendar user={user} courts={courts} bookings={bookings} onBook={handleBook} onCancel={handleCancelBooking} />}
+          </section>
+        )}
+
+        {tab === "prices" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px" }}>{t("prices.title")}</h2>
+            <PriceList />
+          </section>
+        )}
+
+        {tab === "myAccount" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("myAccount.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("myAccount.subtitle")}</p>
+            {!authReady || !profile ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              <MyAccount profile={profile} onSaveProfile={handleSaveProfile} onChangePassword={handleChangePassword} />}
+          </section>
+        )}
+
+        {tab === "myBookings" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 18px" }}>{t("myBookings.title")}</h2>
+            {!authReady || !user ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              <MyBookings user={user} onCancel={handleCancelBooking} />}
+          </section>
+        )}
+
+        {tab === "users" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("adminUsers.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("adminUsers.subtitle")}</p>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !isAdmin ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("settings.restricted")}</p> :
+              <AdminUsers />}
+          </section>
+        )}
+
+        {tab === "settings" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("settings.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("settings.subtitle")}</p>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !isAdmin ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("settings.restricted")}</p> :
+              <SettingsPanel settings={clubSettings} onSave={handleSaveSettings} />}
+          </section>
+        )}
+
+        {tab === "privacy" && <LegalPage content={t("legal.privacy")} />}
+        {tab === "terms" && <LegalPage content={t("legal.terms")} />}
+      </main>
+
+      <footer style={{ background: TOKENS.greenDark, color: "#B9C4BC", padding: "22px 20px" }}>
+        <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          {(address || phone) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 13 }}>
+              {address && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> {address}</span>}
+              {phone && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Phone size={14} /> {phone}</span>}
+            </div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 12 }}>
+            <button onClick={() => setTab("privacy")} style={{ background: "none", border: "none", color: "#B9C4BC", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+              {t("legal.privacyLinkLabel")}
+            </button>
+            <button onClick={() => setTab("terms")} style={{ background: "none", border: "none", color: "#B9C4BC", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+              {t("legal.termsLinkLabel")}
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
