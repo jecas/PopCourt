@@ -9,6 +9,7 @@ import * as api from "./lib/api";
 import { supabase } from "./lib/supabaseClient";
 
 import MatchCard from "./components/MatchCard";
+import AddMatchForm from "./components/AddMatchForm";
 import BracketView from "./components/BracketView";
 import DrawTool from "./components/DrawTool";
 import LoginBox from "./components/LoginBox";
@@ -111,6 +112,11 @@ export default function App() {
 
   const handleUpdateMatch = async (id, patch) => {
     await api.updateMatch(id, patch);
+    refreshMatches();
+  };
+  
+  const handleCreateMatch = async (matchData) => {
+    await api.createMatch(matchData);
     refreshMatches();
   };
 
@@ -252,6 +258,7 @@ export default function App() {
                 </button>
               )}
             </div>
+			{canScoreMatches && refereeMode && <AddMatchForm courts={courts} onCreate={handleCreateMatch} />}
             {!dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Učitavanje…</p> : (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
