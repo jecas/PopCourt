@@ -34,14 +34,73 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  const { data } = supabase.auth.onAuthStateChange((event, session) => callback(event, session));
   return data.subscription;
+}
+
+export async function requestPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: window.location.origin,
+  });
+  if (error) throw error;
+}
+
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
 }
 
 export async function fetchProfile(userId) {
   const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
   if (error) throw error;
   return data;
+}
+
+export async function updateOwnProfile(userId, { fullName, phone, birthDate }) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ full_name: fullName, phone, birth_date: birthDate || null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+// ---------- Admin: users ----------
+
+export async function fetchAllProfiles() {
+  const { data, error } = await supabase.from("profiles").select("*").order("full_name");
+  if (error) throw error;
+  return data;
+}
+
+export async function adminUpdateProfile(id, { credits, role }) {
+  const patch = {};
+  if (credits !== undefined) patch.credits = credits;
+  if (role !== undefined) patch.role = role;
+  const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+// ---------- Club settings ----------
+
+export async function fetchClubSettings() {
+  const { data, error } = await supabase.from("club_settings").select("*").eq("id", 1).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateClubSettings({ name, address, phone }) {
+  const { error } = await supabase
+    .from("club_settings")
+    .update({ name, address, phone, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  if (error) throw error;
+}
+
+export function subscribeClubSettings(onChange) {
+  return supabase
+    .channel("club-settings-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "club_settings" }, onChange)
+    .subscribe();
 }
 
 // ---------- Courts ----------
@@ -63,7 +122,7 @@ export async function fetchMatches() {
   return data;
 }
 
-export async function createMatch({ sport, round, player1, player2, courtId, status, scheduledTime }) {
+export async function createMatch({ sport, round, player1, player2, courtId, status, scheduledTime, drawId, roundIndex, matchIndex }) {
   const { data, error } = await supabase
     .from("matches")
     .insert({
@@ -75,6 +134,9 @@ export async function createMatch({ sport, round, player1, player2, courtId, sta
       status,
       scheduled_time: status === "scheduled" ? scheduledTime : null,
       sets: status === "live" ? [[0, 0]] : [],
+      draw_id: drawId ?? null,
+      round_index: roundIndex ?? null,
+      match_index: matchIndex ?? null,
     })
     .select()
     .single();
@@ -87,6 +149,13 @@ export async function updateMatch(id, patch) {
     .from("matches")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) throw error;
+}
+
+// Zavrsavanje meca ide kroz ovu funkciju umesto plain update-a — automatski
+// upisuje pobednika u sledece kolo zreba ako je mec vezan za bracket slot.
+export async function finishMatch(id, sets) {
+  const { error } = await supabase.rpc("finish_match", { p_match_id: id, p_sets: sets });
   if (error) throw error;
 }
 
@@ -144,18 +213,45 @@ export async function fetchBookings({ from, to }) {
   return data;
 }
 
-export async function createBooking({ courtId, bookingDate, startHour, duration, userId }) {
+export async function fetchMyUpcomingBookings(userId, from) {
   const { data, error } = await supabase
     .from("bookings")
-    .insert({ court_id: courtId, booking_date: bookingDate, start_hour: startHour, duration, user_id: userId })
-    .select()
-    .single();
+    .select("*, courts(name)")
+    .eq("user_id", userId)
+    .gte("booking_date", from)
+    .order("booking_date")
+    .order("start_hour");
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchMyPastBookings(userId, before) {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("*, courts(name)")
+    .eq("user_id", userId)
+    .lt("booking_date", before)
+    .order("booking_date", { ascending: false })
+    .order("start_hour", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// Rezervacija i otkazivanje idu kroz Postgres funkcije (book_court/cancel_booking) koje
+// atomicno proveravaju i troše/vraćaju kredite — direktan insert/delete na tabeli je odbijen.
+export async function createBooking({ courtId, bookingDate, startHour, duration }) {
+  const { data, error } = await supabase.rpc("book_court", {
+    p_court_id: courtId,
+    p_booking_date: bookingDate,
+    p_start_hour: startHour,
+    p_duration: duration,
+  });
   if (error) throw error;
   return data;
 }
 
 export async function cancelBooking(id) {
-  const { error } = await supabase.from("bookings").delete().eq("id", id);
+  const { error } = await supabase.rpc("cancel_booking", { p_booking_id: id });
   if (error) throw error;
 }
 

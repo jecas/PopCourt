@@ -18,6 +18,14 @@ export function fmtDay(d, dayNames) {
   return `${dayNames[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
 }
 
+export function fmtLongDate(d, dayNamesLong, monthNamesShort) {
+  return `${dayNamesLong[d.getDay()]}, ${d.getDate()}. ${monthNamesShort[d.getMonth()]} ${d.getFullYear()}.`;
+}
+
+export function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 export function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
