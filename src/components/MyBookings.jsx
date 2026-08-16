@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { TOKENS, card } from "../constants";
-import { hourLabel, hoursUntil } from "../lib/utils";
+import { dateKey, hourLabel, hoursUntil } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
 import * as api from "../lib/api";
 
@@ -12,7 +12,7 @@ export default function MyBookings({ user, onCancel }) {
   const [ready, setReady] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = dateKey(new Date());
 
   const load = () => {
     Promise.all([
