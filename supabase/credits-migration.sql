@@ -22,7 +22,8 @@ security definer set search_path = public
 as $$
 begin
   if (new.credits is distinct from old.credits or new.role is distinct from old.role) then
-    if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
+    if coalesce(current_setting('popcourt.credit_bypass', true), '') <> 'on'
+       and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
       raise exception 'Samo admin moze da menja kredite ili ulogu.';
     end if;
   end if;
@@ -82,6 +83,7 @@ begin
   values (p_court_id, p_booking_date, p_start_hour, p_duration, auth.uid())
   returning * into v_booking;
 
+  perform set_config('popcourt.credit_bypass', 'on', true);
   update public.profiles set credits = credits - p_duration where id = auth.uid();
 
   return v_booking;
@@ -108,6 +110,7 @@ begin
   end if;
 
   delete from public.bookings where id = p_booking_id;
+  perform set_config('popcourt.credit_bypass', 'on', true);
   update public.profiles set credits = credits + v_booking.duration where id = auth.uid();
 end;
 $$;
