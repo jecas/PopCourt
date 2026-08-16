@@ -66,7 +66,7 @@ declare
   v_credits numeric;
   v_booking public.bookings;
 begin
-  if (p_booking_date + (p_start_hour || ' hours')::interval) - now() < interval '1 hour' then
+  if (p_booking_date + (p_start_hour || ' hours')::interval) at time zone 'Europe/Belgrade' - now() < interval '1 hour' then
     raise exception 'Termin mora biti rezervisan najkasnije 1h unapred.';
   end if;
 
@@ -103,7 +103,7 @@ begin
   if v_booking.user_id <> auth.uid() then
     raise exception 'Možete otkazati samo svoju rezervaciju.';
   end if;
-  if (v_booking.booking_date + (v_booking.start_hour || ' hours')::interval) - now() < interval '24 hours' then
+  if (v_booking.booking_date + (v_booking.start_hour || ' hours')::interval) at time zone 'Europe/Belgrade' - now() < interval '24 hours' then
     raise exception 'Termin se ne može otkazati manje od 24h unapred.';
   end if;
 
