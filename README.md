@@ -5,7 +5,6 @@ Frontend: React + Vite. Backend: Supabase (Postgres baza, autentikacija, realtim
 
 ## Šta je urađeno
 
-- Sve što je u prototipu čuvano privremeno (`window.storage`) sada se čuva u pravoj Postgres bazi na Supabase-u.
 - Prijava/registracija ide preko Supabase Auth (lozinke su heširane, ne čuvaju se kao tekst).
 - Uvedene su uloge: `player` (igrač), `coach` (trener), `referee` (sudija), `admin`. Podrazumevana uloga pri registraciji je `player`; ostale uloge dodeljuje administrator kluba ručno (objašnjeno niže).
 - Samo `referee`/`admin` mogu da menjaju rezultat meča; samo `coach`/`admin` mogu da generišu i objave žreb — ovo se proverava i na frontend-u i u bazi (RLS), tako da se ne može zaobići pozivom API-ja direktno.
@@ -78,15 +77,6 @@ Nema posebne stranice za to (namerno — to radi neko ko upravlja klubom, ne bil
   ```
 
 Osoba treba da se ponovo uloguje (ili osveži stranicu) da bi videla nova ovlašćenja.
-
-## 7. Build za produkciju (opciono)
-
-```bash
-npm run build     # pravi optimizovan build u folderu dist/
-npm run preview   # servira taj build lokalno radi provere
-```
-
-Za pravo hostovanje (Vercel, Netlify i sl.) dovoljno je povezati repo i podesiti iste `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` environment varijable na hosting servisu.
 
 ## Struktura projekta
 
