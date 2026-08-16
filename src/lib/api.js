@@ -63,6 +63,25 @@ export async function fetchMatches() {
   return data;
 }
 
+export async function createMatch({ sport, round, player1, player2, courtId, status, scheduledTime }) {
+  const { data, error } = await supabase
+    .from("matches")
+    .insert({
+      sport,
+      round,
+      player1,
+      player2,
+      court_id: courtId,
+      status,
+      scheduled_time: status === "scheduled" ? scheduledTime : null,
+      sets: status === "live" ? [[0, 0]] : [],
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function updateMatch(id, patch) {
   const { error } = await supabase
     .from("matches")
