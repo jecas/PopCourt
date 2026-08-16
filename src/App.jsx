@@ -42,6 +42,7 @@ export default function App() {
   const [bookings, setBookings] = useState([]);
   const [draw, setDraw] = useState(null);
   const [clubSettings, setClubSettings] = useState(null);
+  const [priceRules, setPriceRules] = useState([]);
   const [dataReady, setDataReady] = useState(false);
   const [dataError, setDataError] = useState("");
 
@@ -94,6 +95,7 @@ export default function App() {
   const refreshMatches = useCallback(() => api.fetchMatches().then(setMatches).catch((e) => setDataError(e.message)), []);
   const refreshDraw = useCallback(() => api.fetchLatestDraw().then(setDraw).catch((e) => setDataError(e.message)), []);
   const refreshSettings = useCallback(() => api.fetchClubSettings().then(setClubSettings).catch((e) => setDataError(e.message)), []);
+  const refreshPriceRules = useCallback(() => api.fetchPriceRules().then(setPriceRules).catch((e) => setDataError(e.message)), []);
   const refreshBookings = useCallback(() => {
     if (!session) { setBookings([]); return; }
     api.fetchBookings(bookingRange).then(setBookings).catch((e) => setDataError(e.message));
@@ -103,12 +105,13 @@ export default function App() {
     let cancelled = false;
     async function loadAll() {
       try {
-        const [c, m, d, s] = await Promise.all([api.fetchCourts(), api.fetchMatches(), api.fetchLatestDraw(), api.fetchClubSettings()]);
+        const [c, m, d, s, pr] = await Promise.all([api.fetchCourts(), api.fetchMatches(), api.fetchLatestDraw(), api.fetchClubSettings(), api.fetchPriceRules()]);
         if (cancelled) return;
         setCourts(c);
         setMatches(m);
         setDraw(d);
         setClubSettings(s);
+        setPriceRules(pr);
       } catch (e) {
         if (!cancelled) setDataError(e.message);
       } finally {
@@ -126,13 +129,15 @@ export default function App() {
     const drawCh = api.subscribeDraws(refreshDraw);
     const bookingsCh = api.subscribeBookings(refreshBookings);
     const settingsCh = api.subscribeClubSettings(refreshSettings);
+    const priceRulesCh = api.subscribePriceRules(refreshPriceRules);
     return () => {
       supabase.removeChannel(matchesCh);
       supabase.removeChannel(drawCh);
       supabase.removeChannel(bookingsCh);
       supabase.removeChannel(settingsCh);
+      supabase.removeChannel(priceRulesCh);
     };
-  }, [refreshMatches, refreshDraw, refreshBookings, refreshSettings]);
+  }, [refreshMatches, refreshDraw, refreshBookings, refreshSettings, refreshPriceRules]);
 
   const clubName = clubSettings?.name || DEFAULT_CLUB_NAME;
 
@@ -190,6 +195,11 @@ export default function App() {
   const handleSaveSettings = async ({ name, address, phone }) => {
     await api.updateClubSettings({ name, address, phone });
     refreshSettings();
+  };
+
+  const handleSaveZones = async (sport, rules) => {
+    await api.savePriceRules(sport, rules);
+    refreshPriceRules();
   };
 
   const handleSaveProfile = async (patch) => {
@@ -402,14 +412,14 @@ export default function App() {
             {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
               !user ? <LoginBox onSignIn={handleSignIn} onSignUp={handleSignUp} onForgotPassword={handleForgotPassword} /> :
               !dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
-              <BookingCalendar user={user} courts={courts} bookings={bookings} onBook={handleBook} onCancel={handleCancelBooking} />}
+              <BookingCalendar user={user} courts={courts} bookings={bookings} priceRules={priceRules} onBook={handleBook} onCancel={handleCancelBooking} />}
           </section>
         )}
 
         {tab === "prices" && (
           <section>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px" }}>{t("prices.title")}</h2>
-            <PriceList />
+            <PriceList priceRules={priceRules} isAdmin={isAdmin} onSaveZones={handleSaveZones} />
           </section>
         )}
 
