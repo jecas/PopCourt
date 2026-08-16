@@ -1,23 +1,25 @@
-# Teniski i padel tereni
+# PopCourt
 
 Sajt teniskog centra PopCourt — rezultati uživo, žreb turnira, rezervacija terena i cenovnik.
 Frontend: React + Vite. Backend: Supabase (Postgres baza, autentikacija, realtime).
 
 ## Šta je urađeno
 
+- Sve što je u prototipu čuvano privremeno (`window.storage`) sada se čuva u pravoj Postgres bazi na Supabase-u.
 - Prijava/registracija ide preko Supabase Auth (lozinke su heširane, ne čuvaju se kao tekst). Korisnik se registruje sa pravim email-om i dobija pravi mejl za potvrdu naloga; korisničko ime u bazi je automatski isto što i taj email.
 - Uvedene su uloge: `player` (igrač), `coach` (trener), `referee` (sudija), `admin`. Podrazumevana uloga pri registraciji je `player`; ostale uloge dodeljuje administrator kluba ručno (objašnjeno niže).
 - Samo `referee`/`admin` mogu da menjaju rezultat meča; samo `coach`/`admin` mogu da generišu i objave žreb — ovo se proverava i na frontend-u i u bazi (RLS), tako da se ne može zaobići pozivom API-ja direktno.
 - Rezervacije terena: baza sama sprečava da dva termina na istom terenu preklope (exclusion constraint), pored provere u aplikaciji (najranija rezervacija 1h unapred, otkazivanje najkasnije 24h unapred).
-- Rezultati, rezervacije i žreb se ažuriraju uživo kod svih otvorenih sajtova, bez ručnog refresh-a stranice.
+- Rezultati, rezervacije i žreb se ažuriraju uživo kod svih otvorenih sajtova (Supabase Realtime), bez ručnog refresh-a stranice.
 - Korisnici mogu sami da resetuju zaboravljenu lozinku preko mejla.
 - Admin nalog ima poseban tab **Podešavanja** gde može sam da promeni adresu i telefon kluba (prikazuju se u footeru i na mapi), bez potrebe da neko menja kod.
 - Sajt ima stranice **Politika privatnosti** i **Uslovi korišćenja** (link u footeru), na sva 3 jezika. Ovo je osnovni predložak — pre komercijalne upotrebe (posebno kad budeš imala pravu firmu i klijente) preporučujem da ih pregleda advokat.
-- **Sistem kredita**: svaki korisnik ima kredit, rezervacija termina troši kredite (1 kredit = 1h), otkazivanje ih vraća. Admin dodeljuje kredite ručno kroz tab **Korisnici**
+- **Sistem kredita** (kao na starom popcourt.rs sajtu): svaki korisnik ima broj kredita, rezervacija termina troši kredite (1 kredit = 1h), otkazivanje ih vraća. Admin dodeljuje kredite ručno kroz tab **Korisnici** (kad neko uplati članarinu/termine van sajta — pravo online plaćanje karticom je poseban, veći korak, pogledaj napomenu u nastavku).
 - Tab **Moj nalog** — korisnik menja telefon/datum rođenja i lozinku, vidi svoje kredite.
 - Tab **Moje rezervacije** — pregled predstojećih termina (sa otkazivanjem) i istorije prošlih termina.
-- Raspored termina je u kalendarskom prikazu (tereni kao kolone, sati kao redovi) sa prekidačem Tenis/Padel tereni.
-- Ime kluba, adresa i telefon su podešavanje (tab **Podešavanja**, samo admin).
+- Raspored termina je redizajniran u kalendarski prikaz (tereni kao kolone, sati kao redovi) sa prekidačem Tenis/Padel tereni, sličan starom sajtu.
+- Sajt više nema zakucano ime "PopCourt" — ime kluba, adresa i telefon su podešavanje (tab **Podešavanja**, samo admin), pa se isti kod može ponovo iskoristiti za bilo kog klijenta bez menjanja koda. (Statični SEO meta tagovi u `index.html` su izuzetak — oni se ručno menjaju po klijentu, pogledaj napomenu na vrhu tog fajla.)
+- Na naslovnoj je dodat kratak tekst o istoriji tenisa i padela, na sva 3 jezika.
 - **Automatsko popunjavanje žreba**: kad se meč poveže sa mestom u žrebu (opcija u formi "Dodaj meč") i sudija ga završi, pobednik se sam upisuje u sledeće kolo žreba na naslovnoj strani.
 
 ## 1. Preduslovi na tvom laptopu
@@ -34,22 +36,25 @@ Frontend: React + Vite. Backend: Supabase (Postgres baza, autentikacija, realtim
 ## 2. Preuzimanje koda
 
 ```bash
-git clone https://github.com/jecas/RezervacijaTerena.git
-cd RezervacijaTerena
+git clone https://github.com/jecas/PopCourt.git
+cd PopCourt
+git checkout claude/web-modernization-k8e6bm
 npm install
 ```
 
 ## 3. Napraviti Supabase projekat
 
 1. Idi na https://supabase.com/dashboard i uloguj se (ili napravi nalog).
-2. Klikni **New project**. Izaberi ime (npr. `rezervacijaTerena`), lozinku za bazu (sačuvaj je negde), region (najbliži, npr. Frankfurt), i sačekaj minut-dva da se projekat pokrene.
+2. Klikni **New project**. Izaberi ime (npr. `popcourt`), lozinku za bazu (sačuvaj je negde), region (najbliži, npr. Frankfurt), i sačekaj minut-dva da se projekat pokrene.
 3. U levom meniju otvori **SQL Editor** → **New query**.
 4. Otvori fajl `supabase/schema.sql` iz ovog repozitorijuma, kopiraj ceo sadržaj, nalepi u editor i klikni **Run**.
    - Ovo pravi sve tabele (profili, podešavanja kluba, tereni, mečevi, žreb, rezervacije), sigurnosna pravila (RLS) i uključuje realtime.
    - Na kraju fajla su i 4 primera meča za probu — obriši te redove iz SQL-a pre pokretanja ako ih ne želiš.
+   - Ako si `schema.sql` već pokrenula ranije, umesto ponovnog pokretanja celog fajla pokreni samo migracije po redosledu: `supabase/settings-migration.sql`, pa `supabase/credits-migration.sql`, pa `supabase/branding-and-bracket-migration.sql`, pa `supabase/fix-timezone.sql` (ispravka provere vremena za rezervaciju), pa `supabase/fix-credits-trigger.sql` (ispravka koja je do sada blokirala svaku rezervaciju za korisnike koji nisu admin), pa `supabase/pricing-migration.sql` (cenovnik po zonama — rezervacija sada skida kredite po pravoj ceni termina, uređuje se na strani Cenovnik kao admin), pa `supabase/admin-override-migration.sql` (admin rezerviše bez kredita i bez roka, i sme da otkaže bilo čiju rezervaciju).
+   - Da bi korisnik dobio mejl kad mu admin otkaže termin, prati uputstvo u `supabase/functions/notify-cancelled-booking/README.md` (jednokratno, ručno podešavanje — zahteva besplatan Resend nalog i Supabase CLI, ovo nije nešto što se pokreće iz SQL Editora).
 5. Da bi "Zaboravljena lozinka" radila, idi na **Authentication → URL Configuration** i u polje **Redirect URLs** dodaj adresu na kojoj sajt radi (za lokalni rad `http://localhost:5173`, kasnije i pravi domen kad ga budeš imala). Bez ovoga Supabase odbija link za reset lozinke.
 6. Opcija **Confirm email** (Authentication → Sign In / Providers → Email) treba da ostane **uključena** (to je podrazumevano) — korisnici se registruju sa pravim email-om i moraju da kliknu na link u mejlu pre nego što mogu da se uloguju.
-   - Supabase automatski šalje te mejlove preko svog ugrađenog mejl servisa — pod **Authentication → Emails → SMTP Settings** može podesiti sopstveni mejl provajder (npr. Resend, Gmail SMTP).
+   - Supabase automatski šalje te mejlove preko svog ugrađenog mejl servisa — ne treba ti sopstveni mejl server da bi ovo radilo. Ima ograničenje broja mejlova na sat na besplatnom planu (dovoljno za probu i mali klub); za veći obim kasnije se pod **Authentication → Emails → SMTP Settings** može podesiti sopstveni mejl provajder (npr. Resend, Gmail SMTP).
    - Mejlovi za potvrdu ponekad upadnu u spam/junk folder — proveri i tamo ako ne stigne odmah.
 
 ## 4. Poveži aplikaciju sa Supabase projektom
@@ -93,6 +98,14 @@ Uloge i krediti se sada mogu menjati i kroz sam sajt — uloguj se kao admin, id
 
 **Napomena o pravom online plaćanju:** trenutni sistem kredita je "ručni" — korisnik uplati (na račun kluba ili u kešu), admin mu doda kredite kroz Korisnici tab. Da bi korisnici mogli sami da plate karticom na sajtu, potrebna je registrovana firma i ugovor sa licenciranim platnim procesorom (banka ili servis poput AllSecure/WSPay) — to je poseban korak van ovog koda.
 
+## 7. Build za produkciju (opciono)
+
+```bash
+npm run build     # pravi optimizovan build u folderu dist/
+npm run preview   # servira taj build lokalno radi provere
+```
+
+Za pravo hostovanje (Vercel, Netlify i sl.) dovoljno je povezati repo i podesiti iste `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` environment varijable na hosting servisu.
 
 ## Struktura projekta
 
