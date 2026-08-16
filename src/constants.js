@@ -6,6 +6,7 @@ export const TOKENS = {
 export const NAV_ITEMS = ["Naslovna", "Rezultati uživo", "Žreb", "Rezervacija terena", "Cenovnik"];
 
 export const CLUB_ADDRESS = "Hipodrom, Bavaništanski put bb, Pančevo";
+export const MAP_QUERY = "Tenis centar PopCourt, Hipodrom, Bavaništanski put bb, Pančevo";
 
 export const OPEN_HOUR = 8;
 export const CLOSE_HOUR = 22;
