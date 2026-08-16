@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Coins } from "lucide-react";
 import { TOKENS, OPEN_HOUR, CLOSE_HOUR, DURATIONS } from "../constants";
-import { dateKey, fmtLongDate, hourLabel, hoursUntil, isSameDay } from "../lib/utils";
+import { dateKey, fmtLongDate, hourLabel, hoursUntil, isSameDay, priceForSlot, computeBookingPrice } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
 
 const ROW_HEIGHT = 46;
 const HOURS = Array.from({ length: CLOSE_HOUR - OPEN_HOUR }, (_, i) => OPEN_HOUR + i);
 
-export default function BookingCalendar({ user, courts, bookings, onBook, onCancel }) {
+export default function BookingCalendar({ user, courts, bookings, priceRules, onBook, onCancel }) {
   const { t } = useLang();
+  const isAdmin = user.role === "admin";
   const maxDays = user.role === "coach" || user.role === "admin" ? 14 : 7;
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const maxDate = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + maxDays - 1); return d; }, [today, maxDays]);
@@ -36,13 +37,19 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
 
   const bookSlot = async (courtId, startHour) => {
     setMsg("");
-    const leadTime = hoursUntil(selectedDate, startHour);
-    if (leadTime < 1) { setMsg(t("booking.errLeadTime")); return; }
+    if (!isAdmin) {
+      const leadTime = hoursUntil(selectedDate, startHour);
+      if (leadTime < 1) { setMsg(t("booking.errLeadTime")); return; }
+    }
     const neededSlots = [];
     for (let h = startHour; h < startHour + duration; h += 0.5) neededSlots.push(h);
     if (neededSlots[neededSlots.length - 1] + 0.5 > CLOSE_HOUR) { setMsg(t("booking.errCloseOverflow")); return; }
     if (neededSlots.some((h) => bookingAt(courtId, h))) { setMsg(t("booking.errConflict")); return; }
-    if ((user.credits ?? 0) < duration) { setMsg(t("booking.errInsufficientCredits")); return; }
+    if (!isAdmin) {
+      const price = computeBookingPrice(priceRules, sport, startHour, duration);
+      if (price == null) { setMsg(t("booking.errNoPrice")); return; }
+      if ((user.credits ?? 0) < price) { setMsg(t("booking.errInsufficientCredits")); return; }
+    }
     setBusy(true);
     try {
       await onBook({ courtId, bookingDate: selectedDate, startHour, duration });
@@ -55,9 +62,16 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
 
   const cancelBooking = async (b) => {
     setMsg("");
-    if (b.user_id !== user.id) return;
-    const left = hoursUntil(b.booking_date, b.start_hour);
-    if (left < 24) { setMsg(t("booking.errCancelWindow")); return; }
+    const mine = b.user_id === user.id;
+    if (!mine && !isAdmin) return;
+    if (!isAdmin) {
+      const left = hoursUntil(b.booking_date, b.start_hour);
+      if (left < 24) { setMsg(t("booking.errCancelWindow")); return; }
+    }
+    if (isAdmin && !mine) {
+      const ownerName = b.profiles?.full_name || "";
+      if (!window.confirm(t("booking.confirmAdminCancel")(ownerName))) return;
+    }
     setBusy(true);
     try {
       await onCancel(b.id);
@@ -86,7 +100,7 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
           <button onClick={() => setSport("Padel")} style={sportBtnStyle(sport === "Padel")}>{t("booking.sportPadel")}</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: TOKENS.green }}>
-          <Coins size={15} /> {t("booking.creditsLabel")}: {user.credits ?? 0}
+          <Coins size={15} /> {isAdmin ? t("booking.adminNoCredits") : `${t("booking.creditsLabel")}: ${user.credits ?? 0}`}
         </div>
       </div>
 
@@ -123,12 +137,18 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
       {msg && <p style={{ fontSize: 13, color: TOKENS.clay, marginBottom: 10 }}>{msg}</p>}
 
       <div style={{ overflowX: "auto", opacity: busy ? 0.6 : 1, pointerEvents: busy ? "none" : "auto" }}>
-        <div style={{ display: "flex", minWidth: 120 + filteredCourts.length * 150 }}>
-          <div style={{ width: 44, flex: "0 0 auto" }}>
+        <div style={{ display: "flex", minWidth: 140 + filteredCourts.length * 150 }}>
+          <div style={{ width: 56, flex: "0 0 auto" }}>
             <div style={{ height: 28 }} />
-            {HOURS.map((h) => (
-              <div key={h} style={{ height: ROW_HEIGHT, fontSize: 11, color: "#8B8A80", position: "relative", top: -6 }}>{String(h).padStart(2, "0")}h</div>
-            ))}
+            {HOURS.map((h) => {
+              const price = priceForSlot(priceRules, sport, h);
+              return (
+                <div key={h} style={{ height: ROW_HEIGHT, position: "relative", top: -6 }}>
+                  <div style={{ fontSize: 11, color: "#8B8A80" }}>{String(h).padStart(2, "0")}h</div>
+                  {price != null && <div style={{ fontSize: 10, color: TOKENS.clay, fontWeight: 600 }}>{t("booking.priceLabel")(price)}</div>}
+                </div>
+              );
+            })}
           </div>
           {filteredCourts.map((court) => (
             <div key={court.id} style={{ flex: "1 0 150px", minWidth: 150, borderLeft: `1px solid ${TOKENS.line}` }}>
@@ -144,11 +164,13 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
               >
                 {dayBookings.filter((b) => b.court_id === court.id).map((b) => {
                   const mine = b.user_id === user.id;
+                  const canCancel = mine || isAdmin;
+                  const label = mine ? user.name : isAdmin ? (b.profiles?.full_name || t("booking.titleTaken")) : t("booking.titleTaken");
                   return (
                     <div
                       key={b.id}
-                      onClick={(e) => { e.stopPropagation(); if (mine) cancelBooking(b); }}
-                      title={mine ? t("booking.titleCancel") : t("booking.titleTaken")}
+                      onClick={(e) => { e.stopPropagation(); if (canCancel) cancelBooking(b); }}
+                      title={mine ? t("booking.titleCancel") : isAdmin ? t("booking.titleCancelAdmin") : t("booking.titleTaken")}
                       style={{
                         position: "absolute", left: 3, right: 3,
                         top: (b.start_hour - OPEN_HOUR) * ROW_HEIGHT + 1,
@@ -157,13 +179,13 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
                         background: mine ? TOKENS.ball : "#EFE9DC",
                         color: mine ? TOKENS.greenDark : "#8B8A80",
                         border: `1px solid ${mine ? TOKENS.ball : TOKENS.line}`,
-                        cursor: mine ? "pointer" : "default",
+                        cursor: canCancel ? "pointer" : "default",
                         fontSize: 11, fontWeight: 600, lineHeight: 1.3,
                       }}
                     >
                       {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)}
                       <br />
-                      {mine ? user.name : t("booking.titleTaken")}
+                      {label}
                     </div>
                   );
                 })}

@@ -50,7 +50,7 @@ export default function MyBookings({ user, onCancel }) {
             <div key={b.id} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{b.courts?.name}</div>
-                <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)}</div>
+                <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)} · {t("booking.priceLabel")(b.credits_charged).replace("/h", "")}</div>
               </div>
               <button onClick={() => cancel(b)} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 7, border: `1px solid ${TOKENS.clay}`, background: "#fff", color: TOKENS.clay, cursor: "pointer" }}>
                 <X size={12} /> {t("myBookings.cancel")}
