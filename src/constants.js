@@ -5,8 +5,10 @@ export const TOKENS = {
 
 export const NAV_ITEMS = ["home", "results", "draw", "booking", "prices"];
 
-export const CLUB_ADDRESS = "Hipodrom, Bavaništanski put bb, Pančevo";
-export const MAP_QUERY = "Tenis centar PopCourt, Hipodrom, Bavaništanski put bb, Pančevo";
+// Fallback vrednosti dok se pravo podešavanje ne učita iz baze (Podešavanja tab).
+export const DEFAULT_CLUB_NAME = "Teniski i padel centar";
+export const CLUB_ADDRESS = "";
+export const CLUB_PHONE = "";
 
 export const OPEN_HOUR = 8;
 export const CLOSE_HOUR = 22;

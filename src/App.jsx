@@ -3,7 +3,7 @@ import {
   Menu, X, RadioTower, Trophy, MapPin, Phone, ChevronRight, Lock, LogIn, LogOut,
 } from "lucide-react";
 
-import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, MAP_QUERY, card } from "./constants";
+import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, CLUB_PHONE, DEFAULT_CLUB_NAME, card } from "./constants";
 import { dateKey } from "./lib/utils";
 import { useLang } from "./lib/i18n.jsx";
 import { LANGUAGES } from "./lib/translations";
@@ -17,6 +17,12 @@ import DrawTool from "./components/DrawTool";
 import LoginBox from "./components/LoginBox";
 import BookingCalendar from "./components/BookingCalendar";
 import PriceList from "./components/PriceList";
+import SettingsPanel from "./components/SettingsPanel";
+import LegalPage from "./components/LegalPage";
+import ResetPasswordForm from "./components/ResetPasswordForm";
+import MyAccount from "./components/MyAccount";
+import MyBookings from "./components/MyBookings";
+import AdminUsers from "./components/AdminUsers";
 
 const BOOKING_WINDOW_DAYS = 14;
 
@@ -29,11 +35,13 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const [matches, setMatches] = useState([]);
   const [courts, setCourts] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [draw, setDraw] = useState(null);
+  const [clubSettings, setClubSettings] = useState(null);
   const [dataReady, setDataReady] = useState(false);
   const [dataError, setDataError] = useState("");
 
@@ -41,9 +49,22 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     api.getSession().then((s) => { if (!cancelled) setSession(s); });
-    const sub = api.onAuthStateChange((s) => setSession(s));
+    const sub = api.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === "PASSWORD_RECOVERY") setShowResetPassword(true);
+    });
     return () => { cancelled = true; sub.unsubscribe(); };
   }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (!session?.user) return;
+    try {
+      const p = await api.fetchProfile(session.user.id);
+      setProfile(p);
+    } catch (e) {
+      /* ignore */
+    }
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,15 +83,17 @@ export default function App() {
     return () => { cancelled = true; };
   }, [session]);
 
-  const user = session?.user && profile ? { id: session.user.id, name: profile.full_name, role: profile.role } : null;
+  const user = session?.user && profile ? { id: session.user.id, name: profile.full_name, role: profile.role, credits: profile.credits } : null;
   const canScoreMatches = profile?.role === "referee" || profile?.role === "admin";
   const canManageDraw = profile?.role === "coach" || profile?.role === "admin";
+  const isAdmin = profile?.role === "admin";
 
   // ---------- data loading ----------
   const bookingRange = { from: dateKey(new Date()), to: dateKey(new Date(Date.now() + BOOKING_WINDOW_DAYS * 86400000)) };
 
   const refreshMatches = useCallback(() => api.fetchMatches().then(setMatches).catch((e) => setDataError(e.message)), []);
   const refreshDraw = useCallback(() => api.fetchLatestDraw().then(setDraw).catch((e) => setDataError(e.message)), []);
+  const refreshSettings = useCallback(() => api.fetchClubSettings().then(setClubSettings).catch((e) => setDataError(e.message)), []);
   const refreshBookings = useCallback(() => {
     if (!session) { setBookings([]); return; }
     api.fetchBookings(bookingRange).then(setBookings).catch((e) => setDataError(e.message));
@@ -80,11 +103,12 @@ export default function App() {
     let cancelled = false;
     async function loadAll() {
       try {
-        const [c, m, d] = await Promise.all([api.fetchCourts(), api.fetchMatches(), api.fetchLatestDraw()]);
+        const [c, m, d, s] = await Promise.all([api.fetchCourts(), api.fetchMatches(), api.fetchLatestDraw(), api.fetchClubSettings()]);
         if (cancelled) return;
         setCourts(c);
         setMatches(m);
         setDraw(d);
+        setClubSettings(s);
       } catch (e) {
         if (!cancelled) setDataError(e.message);
       } finally {
@@ -101,26 +125,39 @@ export default function App() {
     const matchesCh = api.subscribeMatches(refreshMatches);
     const drawCh = api.subscribeDraws(refreshDraw);
     const bookingsCh = api.subscribeBookings(refreshBookings);
+    const settingsCh = api.subscribeClubSettings(refreshSettings);
     return () => {
       supabase.removeChannel(matchesCh);
       supabase.removeChannel(drawCh);
       supabase.removeChannel(bookingsCh);
+      supabase.removeChannel(settingsCh);
     };
-  }, [refreshMatches, refreshDraw, refreshBookings]);
-  
+  }, [refreshMatches, refreshDraw, refreshBookings, refreshSettings]);
+
+  const clubName = clubSettings?.name || DEFAULT_CLUB_NAME;
+
   // ---------- document title (per section/language, helps browser tabs & shared links) ----------
   useEffect(() => {
-    document.title = tab === "home" ? t("home.title") : `${t(`nav.${tab}`)} — PopCourt`;
-  }, [tab, lang, t]);
+    document.title = tab === "home" ? clubName : `${t(`nav.${tab}`) || ""} — ${clubName}`;
+  }, [tab, lang, t, clubName]);
 
   // ---------- handlers ----------
   const handleSignIn = async (creds) => { await api.signIn(creds); };
   const handleSignUp = async (creds) => { await api.signUp(creds); };
   const handleSignOut = async () => { await api.signOut(); setTab("results"); };
+  const handleForgotPassword = async (email) => { await api.requestPasswordReset(email); };
+  const handleResetPasswordSubmit = async (newPassword) => { await api.updatePassword(newPassword); };
+  const handleResetPasswordDone = () => setShowResetPassword(false);
 
   const handleUpdateMatch = async (id, patch) => {
     await api.updateMatch(id, patch);
     refreshMatches();
+  };
+
+  const handleFinishMatch = async (id, sets) => {
+    await api.finishMatch(id, sets);
+    refreshMatches();
+    refreshDraw();
   };
 
   const handleCreateMatch = async (matchData) => {
@@ -139,18 +176,40 @@ export default function App() {
   };
 
   const handleBook = async ({ courtId, bookingDate, startHour, duration }) => {
-    await api.createBooking({ courtId, bookingDate, startHour, duration, userId: user.id });
+    await api.createBooking({ courtId, bookingDate, startHour, duration });
     refreshBookings();
+    refreshProfile();
   };
 
   const handleCancelBooking = async (id) => {
     await api.cancelBooking(id);
     refreshBookings();
+    refreshProfile();
+  };
+
+  const handleSaveSettings = async ({ name, address, phone }) => {
+    await api.updateClubSettings({ name, address, phone });
+    refreshSettings();
+  };
+
+  const handleSaveProfile = async (patch) => {
+    await api.updateOwnProfile(user.id, patch);
+    refreshProfile();
+  };
+
+  const handleChangePassword = async (newPassword) => {
+    await api.updatePassword(newPassword);
   };
 
   const liveMatches = matches.filter((m) => m.status === "live");
   const otherMatches = matches.filter((m) => m.status !== "live");
-  const visibleNav = NAV_ITEMS.filter((item) => item !== "draw" || canManageDraw);
+  const visibleNav = NAV_ITEMS
+    .filter((item) => item !== "draw" || canManageDraw)
+    .concat(user ? ["myBookings", "myAccount"] : [])
+    .concat(isAdmin ? ["settings", "users"] : []);
+
+  const address = clubSettings?.address || CLUB_ADDRESS;
+  const phone = clubSettings?.phone || CLUB_PHONE;
 
   const LangSwitcher = ({ mobile }) => (
     <div style={{ display: "flex", gap: 4, ...(mobile ? { padding: "14px 20px" } : {}) }}>
@@ -183,13 +242,15 @@ export default function App() {
         @media (min-width: 800px) { .pc-desktop-nav { display: flex !important; } .pc-menu-btn { display: none !important; } }
       `}</style>
 
+      {showResetPassword && <ResetPasswordForm onSubmit={handleResetPasswordSubmit} onDone={handleResetPasswordDone} />}
+
       <header style={{ background: TOKENS.green, position: "sticky", top: 0, zIndex: 20 }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 8, background: TOKENS.clay, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Trophy size={18} color="#fff" />
             </div>
-            <span style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>PopCourt</span>
+            <span style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>{clubName}</span>
           </div>
 
           <nav style={{ display: "none", gap: 18, alignItems: "center" }} className="pc-desktop-nav">
@@ -236,7 +297,7 @@ export default function App() {
 
         {tab === "home" && (
           <section>
-            <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>{t("home.title")}</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>{clubName}</h1>
             <p style={{ color: "#5A5950", fontSize: 15, maxWidth: 560, lineHeight: 1.6, marginBottom: 20 }}>
               {t("home.subtitle")}
             </p>
@@ -252,29 +313,45 @@ export default function App() {
               <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("home.drawEmpty")}</p>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "26px 0 10px" }}>
-              <MapPin size={18} color={TOKENS.clay} />
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{t("home.locationTitle")}</h2>
+            {address && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "26px 0 10px" }}>
+                  <MapPin size={18} color={TOKENS.clay} />
+                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{t("home.locationTitle")}</h2>
+                </div>
+                <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+                  <iframe
+                    title="Lokacija terena"
+                    src={`https://www.google.com/maps?q=${encodeURIComponent(`${clubName}, ${address}`)}&output=embed`}
+                    width="100%"
+                    height="320"
+                    style={{ border: 0, display: "block" }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${clubName}, ${address}`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: TOKENS.green, fontWeight: 600 }}
+                >
+                  {t("home.openInMaps")}
+                </a>
+              </>
+            )}
+
+            <h2 style={{ fontSize: 18, fontWeight: 700, margin: "30px 0 12px" }}>{t("home.historyTitle")}</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={card}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 6px", color: TOKENS.clayDark }}>Tenis</h3>
+                <p style={{ fontSize: 14, color: "#3F3E38", margin: 0, lineHeight: 1.6 }}>{t("home.historyTennis")}</p>
+              </div>
+              <div style={card}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 6px", color: TOKENS.navy }}>Padel</h3>
+                <p style={{ fontSize: 14, color: "#3F3E38", margin: 0, lineHeight: 1.6 }}>{t("home.historyPadel")}</p>
+              </div>
             </div>
-            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
-              <iframe
-                title="Lokacija terena"
-                src={`https://www.google.com/maps?q=${encodeURIComponent(MAP_QUERY)}&output=embed`}
-                width="100%"
-                height="320"
-                style={{ border: 0, display: "block" }}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(MAP_QUERY)}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: TOKENS.green, fontWeight: 600 }}
-            >
-              {t("home.openInMaps")}
-            </a>
           </section>
         )}
 
@@ -288,17 +365,17 @@ export default function App() {
                 </button>
               )}
             </div>
-            {canScoreMatches && refereeMode && <AddMatchForm courts={courts} onCreate={handleCreateMatch} />}
+            {canScoreMatches && refereeMode && <AddMatchForm courts={courts} draw={draw} onCreate={handleCreateMatch} />}
             {!dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> : (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-                  {liveMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} />)}
+                  {liveMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} onFinish={handleFinishMatch} />)}
                 </div>
                 {otherMatches.length > 0 && (
                   <>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#8B8A80", textTransform: "uppercase", letterSpacing: "0.04em", margin: "26px 0 12px" }}>{t("results.otherMatches")}</h3>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-                      {otherMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} />)}
+                      {otherMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} onFinish={handleFinishMatch} />)}
                     </div>
                   </>
                 )}
@@ -326,7 +403,7 @@ export default function App() {
               {t("booking.subtitle")}
             </p>
             {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
-              !user ? <LoginBox onSignIn={handleSignIn} onSignUp={handleSignUp} /> :
+              !user ? <LoginBox onSignIn={handleSignIn} onSignUp={handleSignUp} onForgotPassword={handleForgotPassword} /> :
               !dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
               <BookingCalendar user={user} courts={courts} bookings={bookings} onBook={handleBook} onCancel={handleCancelBooking} />}
           </section>
@@ -338,12 +415,64 @@ export default function App() {
             <PriceList />
           </section>
         )}
+
+        {tab === "myAccount" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("myAccount.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("myAccount.subtitle")}</p>
+            {!authReady || !profile ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              <MyAccount profile={profile} onSaveProfile={handleSaveProfile} onChangePassword={handleChangePassword} />}
+          </section>
+        )}
+
+        {tab === "myBookings" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 18px" }}>{t("myBookings.title")}</h2>
+            {!authReady || !user ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              <MyBookings user={user} onCancel={handleCancelBooking} />}
+          </section>
+        )}
+
+        {tab === "users" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("adminUsers.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("adminUsers.subtitle")}</p>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !isAdmin ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("settings.restricted")}</p> :
+              <AdminUsers />}
+          </section>
+        )}
+
+        {tab === "settings" && (
+          <section>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("settings.title")}</h2>
+            <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>{t("settings.subtitle")}</p>
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !isAdmin ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("settings.restricted")}</p> :
+              <SettingsPanel settings={clubSettings} onSave={handleSaveSettings} />}
+          </section>
+        )}
+
+        {tab === "privacy" && <LegalPage content={t("legal.privacy")} />}
+        {tab === "terms" && <LegalPage content={t("legal.terms")} />}
       </main>
 
       <footer style={{ background: TOKENS.greenDark, color: "#B9C4BC", padding: "22px 20px" }}>
-        <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexWrap: "wrap", gap: 18, fontSize: 13 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> {CLUB_ADDRESS}</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Phone size={14} /> 060/3622-226</span>
+        <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          {(address || phone) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 13 }}>
+              {address && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> {address}</span>}
+              {phone && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Phone size={14} /> {phone}</span>}
+            </div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 12 }}>
+            <button onClick={() => setTab("privacy")} style={{ background: "none", border: "none", color: "#B9C4BC", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+              {t("legal.privacyLinkLabel")}
+            </button>
+            <button onClick={() => setTab("terms")} style={{ background: "none", border: "none", color: "#B9C4BC", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+              {t("legal.termsLinkLabel")}
+            </button>
+          </div>
         </div>
       </footer>
     </div>
