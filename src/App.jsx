@@ -5,6 +5,8 @@ import {
 
 import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, MAP_QUERY, card } from "./constants";
 import { dateKey } from "./lib/utils";
+import { useLang } from "./lib/i18n.jsx";
+import { LANGUAGES } from "./lib/translations";
 import * as api from "./lib/api";
 import { supabase } from "./lib/supabaseClient";
 
@@ -19,8 +21,9 @@ import PriceList from "./components/PriceList";
 const BOOKING_WINDOW_DAYS = 14;
 
 export default function App() {
+  const { lang, setLang, t } = useLang();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tab, setTab] = useState("Rezultati uživo");
+  const [tab, setTab] = useState("results");
   const [refereeMode, setRefereeMode] = useState(false);
 
   const [session, setSession] = useState(null);
@@ -108,13 +111,13 @@ export default function App() {
   // ---------- handlers ----------
   const handleSignIn = async (creds) => { await api.signIn(creds); };
   const handleSignUp = async (creds) => { await api.signUp(creds); };
-  const handleSignOut = async () => { await api.signOut(); setTab("Rezultati uživo"); };
+  const handleSignOut = async () => { await api.signOut(); setTab("results"); };
 
   const handleUpdateMatch = async (id, patch) => {
     await api.updateMatch(id, patch);
     refreshMatches();
   };
-  
+
   const handleCreateMatch = async (matchData) => {
     await api.createMatch(matchData);
     refreshMatches();
@@ -142,7 +145,27 @@ export default function App() {
 
   const liveMatches = matches.filter((m) => m.status === "live");
   const otherMatches = matches.filter((m) => m.status !== "live");
-  const visibleNav = NAV_ITEMS.filter((item) => item !== "Žreb" || canManageDraw);
+  const visibleNav = NAV_ITEMS.filter((item) => item !== "draw" || canManageDraw);
+
+  const LangSwitcher = ({ mobile }) => (
+    <div style={{ display: "flex", gap: 4, ...(mobile ? { padding: "14px 20px" } : {}) }}>
+      {LANGUAGES.map((l) => (
+        <button
+          key={l.code}
+          onClick={() => setLang(l.code)}
+          style={{
+            fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 5,
+            border: `1px solid ${lang === l.code ? TOKENS.ball : "rgba(255,255,255,0.3)"}`,
+            background: lang === l.code ? TOKENS.ball : "transparent",
+            color: lang === l.code ? TOKENS.greenDark : "#F6F2E9",
+            cursor: "pointer",
+          }}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "Inter, system-ui, sans-serif", background: TOKENS.chalk, minHeight: "100%", color: TOKENS.ink }}>
@@ -164,13 +187,14 @@ export default function App() {
             <span style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>PopCourt</span>
           </div>
 
-          <nav style={{ display: "none", gap: 22 }} className="pc-desktop-nav">
-            {visibleNav.map((item) => <button key={item} className={`pc-navlink ${tab === item ? "active" : ""}`} onClick={() => setTab(item)}>{item}</button>)}
+          <nav style={{ display: "none", gap: 18, alignItems: "center" }} className="pc-desktop-nav">
+            {visibleNav.map((item) => <button key={item} className={`pc-navlink ${tab === item ? "active" : ""}`} onClick={() => setTab(item)}>{t(`nav.${item}`)}</button>)}
             {user ? (
               <button className="pc-navlink" onClick={handleSignOut} style={{ display: "flex", alignItems: "center", gap: 5 }}><LogOut size={14} /> {user.name}</button>
             ) : (
-              <button className="pc-navlink" onClick={() => setTab("Rezervacija terena")} style={{ display: "flex", alignItems: "center", gap: 5 }}><LogIn size={14} /> Uloguj se</button>
+              <button className="pc-navlink" onClick={() => setTab("booking")} style={{ display: "flex", alignItems: "center", gap: 5 }}><LogIn size={14} /> {t("nav.login")}</button>
             )}
+            <LangSwitcher />
           </nav>
 
           <button onClick={() => setMenuOpen((v) => !v)} aria-label="Meni" style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex" }} className="pc-menu-btn">
@@ -182,13 +206,14 @@ export default function App() {
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
             {visibleNav.map((item) => (
               <div key={item} className={`pc-mobile-link ${tab === item ? "active" : ""}`} onClick={() => { setTab(item); setMenuOpen(false); }}>
-                {item}<ChevronRight size={16} />
+                {t(`nav.${item}`)}<ChevronRight size={16} />
               </div>
             ))}
-            <div className="pc-mobile-link" onClick={() => { user ? handleSignOut() : setTab("Rezervacija terena"); setMenuOpen(false); }}>
-              {user ? `Odjavi se (${user.name})` : "Uloguj se"}
+            <div className="pc-mobile-link" onClick={() => { user ? handleSignOut() : setTab("booking"); setMenuOpen(false); }}>
+              {user ? `${t("nav.logoutPrefix")} (${user.name})` : t("nav.login")}
               {user ? <LogOut size={16} /> : <LogIn size={16} />}
             </div>
+            <LangSwitcher mobile />
           </div>
         )}
       </header>
@@ -196,35 +221,35 @@ export default function App() {
       <div style={{ background: TOKENS.greenDark, color: "#F6F2E9", padding: "10px 20px" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
           <RadioTower size={15} color={TOKENS.ball} />
-          <span style={{ fontWeight: 600, color: TOKENS.ball }}>{liveMatches.length} meč{liveMatches.length === 1 ? "" : "eva"} uživo</span>
-          <span style={{ color: "#B9C4BC" }}>— rezultati se ažuriraju čim ih sudija unese</span>
+          <span style={{ fontWeight: 600, color: TOKENS.ball }}>{t("live.banner")(liveMatches.length)}</span>
+          <span style={{ color: "#B9C4BC" }}>{t("live.subtitle")}</span>
         </div>
       </div>
 
       <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
         {dataError && <p style={{ color: TOKENS.clay, fontSize: 13, marginBottom: 16 }}>{dataError}</p>}
 
-        {tab === "Naslovna" && (
+        {tab === "home" && (
           <section>
-            <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>Teniski centar PopCourt</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 8px" }}>{t("home.title")}</h1>
             <p style={{ color: "#5A5950", fontSize: 15, maxWidth: 560, lineHeight: 1.6, marginBottom: 20 }}>
-              Osam terena kod hipodroma u Pančevu, tenis i padel, otvoreno 0–24h.
+              {t("home.subtitle")}
             </p>
             {draw && draw.published ? (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <Trophy size={18} color={TOKENS.clay} />
-                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Žreb turnira</h2>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{t("home.drawTitle")}</h2>
                 </div>
                 <div style={{ ...card, overflowX: "auto" }}><BracketView bracket={draw.rounds} compact /></div>
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: "#8B8A80" }}>Žreb za naredni turnir još nije objavljen.</p>
+              <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("home.drawEmpty")}</p>
             )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "26px 0 10px" }}>
               <MapPin size={18} color={TOKENS.clay} />
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Lokacija</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{t("home.locationTitle")}</h2>
             </div>
             <div style={{ ...card, padding: 0, overflow: "hidden" }}>
               <iframe
@@ -243,30 +268,30 @@ export default function App() {
               rel="noreferrer"
               style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: TOKENS.green, fontWeight: 600 }}
             >
-              Otvori u Google Maps →
+              {t("home.openInMaps")}
             </a>
           </section>
         )}
 
-        {tab === "Rezultati uživo" && (
+        {tab === "results" && (
           <section>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Rezultati uživo</h2>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{t("results.title")}</h2>
               {canScoreMatches && (
                 <button onClick={() => setRefereeMode((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, padding: "8px 12px", borderRadius: 8, border: `1px solid ${refereeMode ? TOKENS.clay : TOKENS.line}`, background: refereeMode ? "#F6E3D8" : "#fff", color: refereeMode ? TOKENS.clayDark : "#6B6A63", cursor: "pointer" }}>
-                  <Lock size={12} /> {refereeMode ? "Sudijski režim uključen" : "Uključi sudijski režim"}
+                  <Lock size={12} /> {refereeMode ? t("results.refereeOn") : t("results.refereeOff")}
                 </button>
               )}
             </div>
-			{canScoreMatches && refereeMode && <AddMatchForm courts={courts} onCreate={handleCreateMatch} />}
-            {!dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Učitavanje…</p> : (
+            {canScoreMatches && refereeMode && <AddMatchForm courts={courts} onCreate={handleCreateMatch} />}
+            {!dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> : (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
                   {liveMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} />)}
                 </div>
                 {otherMatches.length > 0 && (
                   <>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: "#8B8A80", textTransform: "uppercase", letterSpacing: "0.04em", margin: "26px 0 12px" }}>Ostali mečevi</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: "#8B8A80", textTransform: "uppercase", letterSpacing: "0.04em", margin: "26px 0 12px" }}>{t("results.otherMatches")}</h3>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
                       {otherMatches.map((m) => <MatchCard key={m.id} match={m} canScore={canScoreMatches && refereeMode} onUpdate={handleUpdateMatch} />)}
                     </div>
@@ -277,34 +302,34 @@ export default function App() {
           </section>
         )}
 
-        {tab === "Žreb" && (
+        {tab === "draw" && (
           <section>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>Žreb — sudijski alat</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("draw.title")}</h2>
             <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>
-              Generišite žreb, proverite raspored, pa kliknite „Objavi žreb na početnoj“ — odmah se pojavljuje na naslovnoj strani, svima.
+              {t("draw.subtitle")}
             </p>
-            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Učitavanje…</p> :
-              !canManageDraw ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Ova stranica je dostupna samo trenerima i administratorima kluba.</p> :
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
+              !canManageDraw ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("draw.restricted")}</p> :
               <DrawTool user={user} draw={draw} onGenerate={handleGenerateDraw} onPublish={handlePublishDraw} />}
           </section>
         )}
 
-        {tab === "Rezervacija terena" && (
+        {tab === "booking" && (
           <section>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>Rezervacija terena</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px" }}>{t("booking.title")}</h2>
             <p style={{ color: "#6B6A63", fontSize: 14, margin: "0 0 18px" }}>
-              Igrači vide i rezervišu termine za narednih 7 dana, treneri za narednih 14 dana.
+              {t("booking.subtitle")}
             </p>
-            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Učitavanje…</p> :
+            {!authReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
               !user ? <LoginBox onSignIn={handleSignIn} onSignUp={handleSignUp} /> :
-              !dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>Učitavanje…</p> :
+              !dataReady ? <p style={{ fontSize: 13, color: "#8B8A80" }}>{t("common.loading")}</p> :
               <BookingCalendar user={user} courts={courts} bookings={bookings} onBook={handleBook} onCancel={handleCancelBooking} />}
           </section>
         )}
 
-        {tab === "Cenovnik" && (
+        {tab === "prices" && (
           <section>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px" }}>Cenovnik</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px" }}>{t("prices.title")}</h2>
             <PriceList />
           </section>
         )}
@@ -312,7 +337,7 @@ export default function App() {
 
       <footer style={{ background: TOKENS.greenDark, color: "#B9C4BC", padding: "22px 20px" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexWrap: "wrap", gap: 18, fontSize: 13 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> Hipodrom, Bavaništanski put bb, Pančevo</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> {CLUB_ADDRESS}</span>
           <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Phone size={14} /> 060/3622-226</span>
         </div>
       </footer>
