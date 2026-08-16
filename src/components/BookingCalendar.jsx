@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { TOKENS, SLOTS, DURATIONS, CLOSE_HOUR } from "../constants";
 import { dateKey, fmtDay, hourLabel, hoursUntil } from "../lib/utils";
+import { useLang } from "../lib/i18n.jsx";
 
 export default function BookingCalendar({ user, courts, bookings, onBook, onCancel }) {
+  const { t } = useLang();
+  const dayNames = t("booking.dayNames");
   const maxDays = user.role === "coach" || user.role === "admin" ? 14 : 7;
   const days = useMemo(() => Array.from({ length: maxDays }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; }), [maxDays]);
   const [dayIdx, setDayIdx] = useState(0);
@@ -18,17 +21,17 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
   const bookSlot = async (courtId, startHour) => {
     setMsg("");
     const leadTime = hoursUntil(selectedDate, startHour);
-    if (leadTime < 1) { setMsg("Termin mora biti rezervisan najkasnije 1h unapred."); return; }
+    if (leadTime < 1) { setMsg(t("booking.errLeadTime")); return; }
     const neededSlots = [];
     for (let h = startHour; h < startHour + duration; h += 0.5) neededSlots.push(h);
-    if (neededSlots[neededSlots.length - 1] + 0.5 > CLOSE_HOUR) { setMsg("Termin te dužine ne staje pre zatvaranja (22h)."); return; }
+    if (neededSlots[neededSlots.length - 1] + 0.5 > CLOSE_HOUR) { setMsg(t("booking.errCloseOverflow")); return; }
     const conflict = neededSlots.some((h) => bookingAt(courtId, h));
-    if (conflict) { setMsg("Deo tog termina je već zauzet — probajte drugi termin ili kraće trajanje."); return; }
+    if (conflict) { setMsg(t("booking.errConflict")); return; }
     setBusy(true);
     try {
       await onBook({ courtId, bookingDate: selectedDate, startHour, duration });
     } catch (e) {
-      setMsg(e.message || "Greška pri rezervaciji.");
+      setMsg(e.message || t("booking.errConflict"));
     } finally {
       setBusy(false);
     }
@@ -38,12 +41,12 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
     setMsg("");
     if (b.user_id !== user.id) return;
     const left = hoursUntil(b.booking_date, b.start_hour);
-    if (left < 24) { setMsg("Termin se ne može otkazati manje od 24h unapred."); return; }
+    if (left < 24) { setMsg(t("booking.errCancelWindow")); return; }
     setBusy(true);
     try {
       await onCancel(b.id);
     } catch (e) {
-      setMsg(e.message || "Greška pri otkazivanju.");
+      setMsg(e.message || t("booking.errCancelWindow"));
     } finally {
       setBusy(false);
     }
@@ -54,17 +57,17 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 10 }}>
         {days.map((d, i) => (
           <button key={i} onClick={() => setDayIdx(i)} style={{ flex: "0 0 auto", padding: "8px 12px", borderRadius: 8, border: `1px solid ${i === dayIdx ? TOKENS.green : TOKENS.line}`, background: i === dayIdx ? TOKENS.green : "#fff", color: i === dayIdx ? "#fff" : TOKENS.ink, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-            {fmtDay(d)}
+            {fmtDay(d, dayNames)}
           </button>
         ))}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Trajanje termina:</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{t("booking.durationHeading")}</span>
         <div style={{ display: "flex", gap: 6 }}>
           {DURATIONS.map((d) => (
             <button key={d} onClick={() => setDuration(d)} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${duration === d ? TOKENS.green : TOKENS.line}`, background: duration === d ? "#E7EFEA" : "#fff", color: duration === d ? TOKENS.green : TOKENS.ink, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              {d === 1 ? "1h" : d === 1.5 ? "1h 30min" : "2h"}
+              {t("booking.durationLabel")(d)}
             </button>
           ))}
         </div>
@@ -94,7 +97,7 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
                     <td key={h} style={{ padding: 2 }}>
                       <button
                         onClick={() => (b ? cancelBooking(b) : bookSlot(court.id, h))}
-                        title={b ? (mine ? "Otkaži rezervaciju (do 24h pre termina)" : "Zauzeto") : "Slobodno — klikni za rezervaciju"}
+                        title={b ? (mine ? t("booking.titleCancel") : t("booking.titleTaken")) : t("booking.titleFree")}
                         style={{ width: 26, height: 30, borderRadius: 5, border: `1px solid ${TOKENS.line}`, background: bg, color: txt, fontSize: 12, cursor: !b || mine ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}
                       >
                         {b ? (mine ? (isStart ? <Check size={12} /> : "") : (isStart ? "×" : "")) : ""}
@@ -108,9 +111,8 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
         </table>
       </div>
       <p style={{ fontSize: 12, color: "#8B8A80", marginTop: 10 }}>
-        {user.role === "coach" || user.role === "admin" ? "Kao trener vidite raspoloživost za narednih 14 dana." : "Kao igrač vidite raspoloživost za narednih 7 dana."}{" "}
-        Žuto je vaša rezervacija (klik otkazuje, osim ako je do termina ostalo manje od 24h), bež je zauzeto od strane drugih.
-        Rezervacija je moguća samo ako do termina ima još bar 1h.
+        {user.role === "coach" || user.role === "admin" ? t("booking.noteCoach") : t("booking.notePlayer")}
+        {t("booking.legend")}
       </p>
     </div>
   );
