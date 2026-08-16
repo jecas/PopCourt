@@ -3,7 +3,7 @@ import {
   Menu, X, RadioTower, Trophy, MapPin, Phone, ChevronRight, Lock, LogIn, LogOut,
 } from "lucide-react";
 
-import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, card } from "./constants";
+import { TOKENS, NAV_ITEMS, CLUB_ADDRESS, MAP_QUERY, card } from "./constants";
 import { dateKey } from "./lib/utils";
 import * as api from "./lib/api";
 import { supabase } from "./lib/supabaseClient";
@@ -223,7 +223,7 @@ export default function App() {
             <div style={{ ...card, padding: 0, overflow: "hidden" }}>
               <iframe
                 title="Lokacija terena"
-                src={`https://www.google.com/maps?q=${encodeURIComponent(CLUB_ADDRESS)}&output=embed`}
+                src={`https://www.google.com/maps?q=${encodeURIComponent(MAP_QUERY)}&output=embed`}
                 width="100%"
                 height="320"
                 style={{ border: 0, display: "block" }}
@@ -232,7 +232,7 @@ export default function App() {
               />
             </div>
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CLUB_ADDRESS)}`}
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(MAP_QUERY)}`}
               target="_blank"
               rel="noreferrer"
               style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: TOKENS.green, fontWeight: 600 }}
