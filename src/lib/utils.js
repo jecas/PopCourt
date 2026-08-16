@@ -10,14 +10,12 @@ export function hoursUntil(dateStr, hour) {
   return (d.getTime() - Date.now()) / 3600000;
 }
 
-const DAY_NAMES = ["ned", "pon", "uto", "sre", "čet", "pet", "sub"];
-
 export function dateKey(d) {
   return d.toISOString().slice(0, 10);
 }
 
-export function fmtDay(d) {
-  return `${DAY_NAMES[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
+export function fmtDay(d, dayNames) {
+  return `${dayNames[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
 }
 
 export function shuffle(arr) {
