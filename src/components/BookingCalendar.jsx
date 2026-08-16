@@ -1,22 +1,38 @@
 import { useMemo, useState } from "react";
-import { Check } from "lucide-react";
-import { TOKENS, SLOTS, DURATIONS, CLOSE_HOUR } from "../constants";
-import { dateKey, fmtDay, hourLabel, hoursUntil } from "../lib/utils";
+import { ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import { TOKENS, OPEN_HOUR, CLOSE_HOUR, DURATIONS } from "../constants";
+import { dateKey, fmtLongDate, hourLabel, hoursUntil, isSameDay } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
+
+const ROW_HEIGHT = 46;
+const HOURS = Array.from({ length: CLOSE_HOUR - OPEN_HOUR }, (_, i) => OPEN_HOUR + i);
 
 export default function BookingCalendar({ user, courts, bookings, onBook, onCancel }) {
   const { t } = useLang();
-  const dayNames = t("booking.dayNames");
   const maxDays = user.role === "coach" || user.role === "admin" ? 14 : 7;
-  const days = useMemo(() => Array.from({ length: maxDays }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; }), [maxDays]);
-  const [dayIdx, setDayIdx] = useState(0);
+  const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  const maxDate = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + maxDays - 1); return d; }, [today, maxDays]);
+
+  const [date, setDate] = useState(today);
+  const [sport, setSport] = useState("Tenis");
   const [duration, setDuration] = useState(1);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const selectedDate = dateKey(days[dayIdx]);
+
+  const selectedDate = dateKey(date);
+  const filteredCourts = courts.filter((c) => c.sport === sport);
+  const dayBookings = bookings.filter((b) => b.booking_date === selectedDate);
 
   const bookingAt = (courtId, hour) =>
-    bookings.find((b) => b.booking_date === selectedDate && b.court_id === courtId && hour >= b.start_hour && hour < b.start_hour + b.duration);
+    dayBookings.find((b) => b.court_id === courtId && hour >= b.start_hour && hour < b.start_hour + b.duration);
+
+  const goDay = (delta) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + delta);
+    if (next < today || next > maxDate) return;
+    setDate(next);
+    setMsg("");
+  };
 
   const bookSlot = async (courtId, startHour) => {
     setMsg("");
@@ -25,13 +41,13 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
     const neededSlots = [];
     for (let h = startHour; h < startHour + duration; h += 0.5) neededSlots.push(h);
     if (neededSlots[neededSlots.length - 1] + 0.5 > CLOSE_HOUR) { setMsg(t("booking.errCloseOverflow")); return; }
-    const conflict = neededSlots.some((h) => bookingAt(courtId, h));
-    if (conflict) { setMsg(t("booking.errConflict")); return; }
+    if (neededSlots.some((h) => bookingAt(courtId, h))) { setMsg(t("booking.errConflict")); return; }
+    if ((user.credits ?? 0) < duration) { setMsg(t("booking.errInsufficientCredits")); return; }
     setBusy(true);
     try {
       await onBook({ courtId, bookingDate: selectedDate, startHour, duration });
     } catch (e) {
-      setMsg(e.message || t("booking.errConflict"));
+      setMsg(mapError(e.message, t));
     } finally {
       setBusy(false);
     }
@@ -46,20 +62,51 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
     try {
       await onCancel(b.id);
     } catch (e) {
-      setMsg(e.message || t("booking.errCancelWindow"));
+      setMsg(mapError(e.message, t));
     } finally {
       setBusy(false);
     }
   };
 
+  const handleColumnClick = (e, court) => {
+    if (e.target !== e.currentTarget) return; // click landed on a booking block, not empty space
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const hour = OPEN_HOUR + Math.floor((offsetY / ROW_HEIGHT) * 2) / 2;
+    bookSlot(court.id, hour);
+  };
+
+  const totalHeight = (CLOSE_HOUR - OPEN_HOUR) * ROW_HEIGHT;
+
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 10 }}>
-        {days.map((d, i) => (
-          <button key={i} onClick={() => setDayIdx(i)} style={{ flex: "0 0 auto", padding: "8px 12px", borderRadius: 8, border: `1px solid ${i === dayIdx ? TOKENS.green : TOKENS.line}`, background: i === dayIdx ? TOKENS.green : "#fff", color: i === dayIdx ? "#fff" : TOKENS.ink, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-            {fmtDay(d, dayNames)}
-          </button>
-        ))}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setSport("Tenis")} style={sportBtnStyle(sport === "Tenis")}>{t("booking.sportTennis")}</button>
+          <button onClick={() => setSport("Padel")} style={sportBtnStyle(sport === "Padel")}>{t("booking.sportPadel")}</button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: TOKENS.green }}>
+          <Coins size={15} /> {t("booking.creditsLabel")}: {user.credits ?? 0}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+        <button onClick={() => goDay(-1)} disabled={isSameDay(date, today)} aria-label={t("booking.prevDay")}
+          style={{ ...navBtnStyle, opacity: isSameDay(date, today) ? 0.35 : 1, cursor: isSameDay(date, today) ? "default" : "pointer" }}>
+          <ChevronLeft size={16} />
+        </button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, textTransform: "capitalize" }}>{fmtLongDate(date, t("booking.dayNamesLong"), t("booking.monthNamesShort"))}</div>
+          {!isSameDay(date, today) && (
+            <button onClick={() => setDate(today)} style={{ background: "none", border: "none", color: TOKENS.green, fontSize: 12, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0, marginTop: 2 }}>
+              {t("booking.today")}
+            </button>
+          )}
+        </div>
+        <button onClick={() => goDay(1)} disabled={isSameDay(date, maxDate)} aria-label={t("booking.nextDay")}
+          style={{ ...navBtnStyle, opacity: isSameDay(date, maxDate) ? 0.35 : 1, cursor: isSameDay(date, maxDate) ? "default" : "pointer" }}>
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -76,44 +123,82 @@ export default function BookingCalendar({ user, courts, bookings, onBook, onCanc
       {msg && <p style={{ fontSize: 13, color: TOKENS.clay, marginBottom: 10 }}>{msg}</p>}
 
       <div style={{ overflowX: "auto", opacity: busy ? 0.6 : 1, pointerEvents: busy ? "none" : "auto" }}>
-        <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 1120 }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: "6px 8px", position: "sticky", left: 0, background: TOKENS.chalk }}></th>
-              {SLOTS.map((h) => <th key={h} style={{ padding: "6px 3px", fontWeight: 600, color: "#8B8A80" }}>{hourLabel(h)}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {courts.map((court) => (
-              <tr key={court.id}>
-                <td style={{ padding: "4px 8px", fontWeight: 600, whiteSpace: "nowrap", position: "sticky", left: 0, background: "#fff" }}>{court.name}</td>
-                {SLOTS.map((h) => {
-                  const b = bookingAt(court.id, h);
-                  const mine = b && b.user_id === user.id;
-                  const isStart = b && b.start_hour === h;
-                  const bg = b ? (mine ? TOKENS.ball : "#EFE9DC") : "#fff";
-                  const txt = b ? (mine ? TOKENS.greenDark : "#9B998C") : TOKENS.green;
+        <div style={{ display: "flex", minWidth: 120 + filteredCourts.length * 150 }}>
+          <div style={{ width: 44, flex: "0 0 auto" }}>
+            <div style={{ height: 28 }} />
+            {HOURS.map((h) => (
+              <div key={h} style={{ height: ROW_HEIGHT, fontSize: 11, color: "#8B8A80", position: "relative", top: -6 }}>{String(h).padStart(2, "0")}h</div>
+            ))}
+          </div>
+          {filteredCourts.map((court) => (
+            <div key={court.id} style={{ flex: "1 0 150px", minWidth: 150, borderLeft: `1px solid ${TOKENS.line}` }}>
+              <div style={{ height: 28, fontSize: 12, fontWeight: 700, textAlign: "center", color: TOKENS.ink }}>{court.name}</div>
+              <div
+                onClick={(e) => handleColumnClick(e, court)}
+                style={{
+                  position: "relative", height: totalHeight, cursor: "pointer",
+                  backgroundImage: `linear-gradient(to bottom, ${TOKENS.line} 1px, transparent 1px)`,
+                  backgroundSize: `100% ${ROW_HEIGHT}px`,
+                  backgroundColor: TOKENS.chalk,
+                }}
+              >
+                {dayBookings.filter((b) => b.court_id === court.id).map((b) => {
+                  const mine = b.user_id === user.id;
                   return (
-                    <td key={h} style={{ padding: 2 }}>
-                      <button
-                        onClick={() => (b ? cancelBooking(b) : bookSlot(court.id, h))}
-                        title={b ? (mine ? t("booking.titleCancel") : t("booking.titleTaken")) : t("booking.titleFree")}
-                        style={{ width: 26, height: 30, borderRadius: 5, border: `1px solid ${TOKENS.line}`, background: bg, color: txt, fontSize: 12, cursor: !b || mine ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}
-                      >
-                        {b ? (mine ? (isStart ? <Check size={12} /> : "") : (isStart ? "×" : "")) : ""}
-                      </button>
-                    </td>
+                    <div
+                      key={b.id}
+                      onClick={(e) => { e.stopPropagation(); if (mine) cancelBooking(b); }}
+                      title={mine ? t("booking.titleCancel") : t("booking.titleTaken")}
+                      style={{
+                        position: "absolute", left: 3, right: 3,
+                        top: (b.start_hour - OPEN_HOUR) * ROW_HEIGHT + 1,
+                        height: b.duration * ROW_HEIGHT - 2,
+                        borderRadius: 6, padding: "4px 6px", boxSizing: "border-box", overflow: "hidden",
+                        background: mine ? TOKENS.ball : "#EFE9DC",
+                        color: mine ? TOKENS.greenDark : "#8B8A80",
+                        border: `1px solid ${mine ? TOKENS.ball : TOKENS.line}`,
+                        cursor: mine ? "pointer" : "default",
+                        fontSize: 11, fontWeight: 600, lineHeight: 1.3,
+                      }}
+                    >
+                      {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)}
+                      <br />
+                      {mine ? user.name : t("booking.titleTaken")}
+                    </div>
                   );
                 })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <p style={{ fontSize: 12, color: "#8B8A80", marginTop: 10 }}>
+
+      <p style={{ fontSize: 12, color: "#8B8A80", marginTop: 14 }}>
         {user.role === "coach" || user.role === "admin" ? t("booking.noteCoach") : t("booking.notePlayer")}
         {t("booking.legend")}
       </p>
     </div>
   );
+}
+
+function sportBtnStyle(active) {
+  return {
+    padding: "8px 14px", borderRadius: 8, border: `1px solid ${active ? TOKENS.green : TOKENS.line}`,
+    background: active ? TOKENS.green : "#fff", color: active ? "#fff" : TOKENS.ink,
+    fontSize: 12, fontWeight: 700, cursor: "pointer",
+  };
+}
+
+const navBtnStyle = {
+  width: 32, height: 32, borderRadius: 8, border: `1px solid ${TOKENS.line}`,
+  background: "#fff", color: TOKENS.green, display: "flex", alignItems: "center", justifyContent: "center",
+};
+
+function mapError(message, t) {
+  if (!message) return message;
+  if (message.includes("Nemate dovoljno kredita")) return t("booking.errInsufficientCredits");
+  if (message.includes("najkasnije 1h")) return t("booking.errLeadTime");
+  if (message.includes("24h")) return t("booking.errCancelWindow");
+  if (message.includes("exclusion") || message.includes("conflicting key")) return t("booking.errConflict");
+  return message;
 }

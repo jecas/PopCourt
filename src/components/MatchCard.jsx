@@ -3,7 +3,7 @@ import { Plus, Minus, Play, Check, Save } from "lucide-react";
 import { TOKENS, miniBtn, smallGhostBtn, card } from "../constants";
 import { useLang } from "../lib/i18n.jsx";
 
-export default function MatchCard({ match, canScore, onUpdate }) {
+export default function MatchCard({ match, canScore, onUpdate, onFinish }) {
   const { t } = useLang();
   const live = match.status === "live";
   const finished = match.status === "finished";
@@ -103,7 +103,7 @@ export default function MatchCard({ match, canScore, onUpdate }) {
           <div style={{ display: "flex", gap: 6 }}>
             {live && localSets.length < 5 && <button onClick={addSet} style={smallGhostBtn}>{t("matchCard.addSet")}</button>}
             {match.status === "scheduled" && <button onClick={() => onUpdate(match.id, { status: "live", sets: [[0, 0]] })} style={{ ...smallGhostBtn, color: TOKENS.clay, borderColor: TOKENS.clay }}><Play size={11} style={{ marginRight: 4 }} /> {t("matchCard.start")}</button>}
-            {live && <button onClick={() => onUpdate(match.id, { status: "finished", sets: localSets })} style={{ ...smallGhostBtn, color: TOKENS.green, borderColor: TOKENS.green }}><Check size={11} style={{ marginRight: 4 }} /> {t("matchCard.finish")}</button>}
+            {live && <button onClick={() => onFinish(match.id, localSets)} style={{ ...smallGhostBtn, color: TOKENS.green, borderColor: TOKENS.green }}><Check size={11} style={{ marginRight: 4 }} /> {t("matchCard.finish")}</button>}
           </div>
         )}
       </div>

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { LogIn, MailCheck } from "lucide-react";
+import { LogIn, MailCheck, KeyRound } from "lucide-react";
 import { TOKENS, card } from "../constants";
 import { useLang } from "../lib/i18n.jsx";
 
-export default function LoginBox({ onSignIn, onSignUp }) {
+export default function LoginBox({ onSignIn, onSignUp, onForgotPassword }) {
   const { t } = useLang();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -13,6 +13,7 @@ export default function LoginBox({ onSignIn, onSignUp }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   const submitLogin = async () => {
     setErr("");
@@ -43,10 +44,35 @@ export default function LoginBox({ onSignIn, onSignUp }) {
     }
   };
 
+  const submitForgot = async () => {
+    setErr("");
+    if (!email.trim()) { setErr(t("login.errFillEmailPass")); return; }
+    setBusy(true);
+    try {
+      await onForgotPassword(email);
+      setForgotSent(true);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (busy) return;
-    mode === "login" ? submitLogin() : submitRegister();
+    if (mode === "login") submitLogin();
+    else if (mode === "register") submitRegister();
+    else submitForgot();
+  };
+
+  const backToLogin = () => {
+    setJustRegistered(false);
+    setForgotSent(false);
+    setMode("login");
+    setPassword("");
+    setPassword2("");
+    setErr("");
   };
 
   if (justRegistered) {
@@ -59,7 +85,24 @@ export default function LoginBox({ onSignIn, onSignUp }) {
         <p style={{ fontSize: 13, color: "#6B6A63", margin: 0 }}>
           {t("login.checkEmailBody")(email)}
         </p>
-        <button onClick={() => { setJustRegistered(false); setMode("login"); setPassword(""); setPassword2(""); }} style={{ marginTop: 14, background: "none", border: "none", color: TOKENS.green, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+        <button onClick={backToLogin} style={{ marginTop: 14, background: "none", border: "none", color: TOKENS.green, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+          {t("login.backToLogin")}
+        </button>
+      </div>
+    );
+  }
+
+  if (forgotSent) {
+    return (
+      <div style={{ ...card, maxWidth: 380 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: TOKENS.green }}>
+          <MailCheck size={20} />
+          <strong style={{ fontSize: 15 }}>{t("login.forgotSentTitle")}</strong>
+        </div>
+        <p style={{ fontSize: 13, color: "#6B6A63", margin: 0 }}>
+          {t("login.forgotSentBody")(email)}
+        </p>
+        <button onClick={backToLogin} style={{ marginTop: 14, background: "none", border: "none", color: TOKENS.green, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
           {t("login.backToLogin")}
         </button>
       </div>
@@ -68,18 +111,30 @@ export default function LoginBox({ onSignIn, onSignUp }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ ...card, maxWidth: 380 }}>
-      <p style={{ fontSize: 13, color: "#6B6A63", margin: "0 0 12px" }}>
-        {t("login.notice")}
-      </p>
+      {mode === "forgot" ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: TOKENS.green }}>
+            <KeyRound size={18} />
+            <strong style={{ fontSize: 15 }}>{t("login.forgotTitle")}</strong>
+          </div>
+          <p style={{ fontSize: 13, color: "#6B6A63", margin: "0 0 14px" }}>{t("login.forgotBody")}</p>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: "#6B6A63", margin: "0 0 12px" }}>
+            {t("login.notice")}
+          </p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button type="button" onClick={() => { setMode("login"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "login" ? TOKENS.green : TOKENS.line}`, background: mode === "login" ? "#E7EFEA" : "#fff", color: mode === "login" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          {t("login.signIn")}
-        </button>
-        <button type="button" onClick={() => { setMode("register"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "register" ? TOKENS.green : TOKENS.line}`, background: mode === "register" ? "#E7EFEA" : "#fff", color: mode === "register" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          {t("login.signUp")}
-        </button>
-      </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <button type="button" onClick={() => { setMode("login"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "login" ? TOKENS.green : TOKENS.line}`, background: mode === "login" ? "#E7EFEA" : "#fff", color: mode === "login" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              {t("login.signIn")}
+            </button>
+            <button type="button" onClick={() => { setMode("register"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "register" ? TOKENS.green : TOKENS.line}`, background: mode === "register" ? "#E7EFEA" : "#fff", color: mode === "register" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              {t("login.signUp")}
+            </button>
+          </div>
+        </>
+      )}
 
       <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.email")}</label>
       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("login.emailPlaceholder")}
@@ -93,9 +148,19 @@ export default function LoginBox({ onSignIn, onSignUp }) {
         </>
       )}
 
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.password")}</label>
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
-        style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
+      {mode !== "forgot" && (
+        <>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.password")}</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+            style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: mode === "login" ? 6 : 12 }} />
+        </>
+      )}
+
+      {mode === "login" && (
+        <button type="button" onClick={() => { setMode("forgot"); setErr(""); }} style={{ background: "none", border: "none", color: TOKENS.green, fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0, marginBottom: 12, display: "block" }}>
+          {t("login.forgotPassword")}
+        </button>
+      )}
 
       {mode === "register" && (
         <>
@@ -108,8 +173,15 @@ export default function LoginBox({ onSignIn, onSignUp }) {
       {err && <p style={{ color: TOKENS.clay, fontSize: 13, marginBottom: 10 }}>{err}</p>}
 
       <button type="submit" disabled={busy} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: TOKENS.green, color: "#fff", border: "none", padding: "10px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
-        <LogIn size={14} /> {busy ? t("login.wait") : mode === "login" ? t("login.submitSignIn") : t("login.submitSignUp")}
+        <LogIn size={14} />
+        {busy ? t("login.wait") : mode === "login" ? t("login.submitSignIn") : mode === "register" ? t("login.submitSignUp") : t("login.forgotSubmit")}
       </button>
+
+      {mode === "forgot" && (
+        <button type="button" onClick={backToLogin} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: "#6B6A63", fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+          {t("login.backToLogin")}
+        </button>
+      )}
     </form>
   );
 }
