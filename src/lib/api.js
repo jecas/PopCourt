@@ -103,6 +103,39 @@ export function subscribeClubSettings(onChange) {
     .subscribe();
 }
 
+// ---------- Cenovnik ----------
+
+export async function fetchPriceRules() {
+  const { data, error } = await supabase.from("price_rules").select("*").order("sport").order("sort_order");
+  if (error) throw error;
+  return data;
+}
+
+// Zamenjuje sva pravila za dati sport novom listom (admin uređuje celu zonsku tabelu odjednom).
+export async function savePriceRules(sport, rules) {
+  const { error: delErr } = await supabase.from("price_rules").delete().eq("sport", sport);
+  if (delErr) throw delErr;
+  if (rules.length > 0) {
+    const { error: insErr } = await supabase.from("price_rules").insert(
+      rules.map((r, i) => ({
+        sport,
+        start_hour: r.startHour,
+        end_hour: r.endHour,
+        price_per_hour: r.pricePerHour,
+        sort_order: i + 1,
+      }))
+    );
+    if (insErr) throw insErr;
+  }
+}
+
+export function subscribePriceRules(onChange) {
+  return supabase
+    .channel("price-rules-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "price_rules" }, onChange)
+    .subscribe();
+}
+
 // ---------- Courts ----------
 
 export async function fetchCourts() {

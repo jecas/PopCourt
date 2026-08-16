@@ -40,6 +40,24 @@ export function shuffle(arr) {
   return a;
 }
 
+// Cena po satu za dati sport u datom trenutku dana (null ako nijedno pravilo ne pokriva taj sat).
+export function priceForSlot(priceRules, sport, hour) {
+  const rule = priceRules.find((r) => r.sport === sport && hour >= r.start_hour && hour < r.end_hour);
+  return rule ? rule.price_per_hour : null;
+}
+
+// Sabira cenu rezervacije pola sata po pola sata — ogledalo compute_booking_price() u bazi,
+// koristi se samo za prikaz pre slanja; stvarnu cenu uvek računa i naplaćuje baza.
+export function computeBookingPrice(priceRules, sport, startHour, duration) {
+  let total = 0;
+  for (let h = startHour; h < startHour + duration; h += 0.5) {
+    const rate = priceForSlot(priceRules, sport, h);
+    if (rate == null) return null;
+    total += rate * 0.5;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 export function buildBracket(players) {
   let size = 2;
   while (size < players.length) size *= 2;
