@@ -5,6 +5,8 @@ export const TOKENS = {
 
 export const NAV_ITEMS = ["Naslovna", "Rezultati uživo", "Žreb", "Rezervacija terena", "Cenovnik"];
 
+export const CLUB_ADDRESS = "Hipodrom, Bavaništanski put bb, Pančevo";
+
 export const OPEN_HOUR = 8;
 export const CLOSE_HOUR = 22;
 export const SLOTS = Array.from({ length: (CLOSE_HOUR - OPEN_HOUR) * 2 }, (_, i) => OPEN_HOUR + i * 0.5);
