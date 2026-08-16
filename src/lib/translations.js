@@ -47,7 +47,6 @@ export const translations = {
     },
     booking: {
       title: "Rezervacija terena",
-      subtitle: "Igrači vide i rezervišu termine za narednih 7 dana, treneri za narednih 14 dana.",
       dayNames: ["ned", "pon", "uto", "sre", "čet", "pet", "sub"],
       dayNamesLong: ["nedelja", "ponedeljak", "utorak", "sreda", "četvrtak", "petak", "subota"],
       monthNamesShort: ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"],
@@ -182,7 +181,7 @@ export const translations = {
       errPublish: "Greška pri objavljivanju žreba.",
     },
     login: {
-      notice: "Nalozi i lozinke se čuvaju u Supabase autentikaciji (heširano, van naše baze). Trener/sudijski/admin pristup dodeljuje administrator kluba naknadno.",
+      notice: "Trener/sudijski/admin pristup dodeljuje administrator kluba naknadno.",
       signIn: "Prijavi se",
       signUp: "Napravi nalog",
       email: "Email",
@@ -362,7 +361,6 @@ export const translations = {
     },
     booking: {
       title: "Court Booking",
-      subtitle: "Players can view and book slots for the next 7 days, coaches for the next 14 days.",
       dayNames: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       dayNamesLong: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
       monthNamesShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -497,7 +495,7 @@ export const translations = {
       errPublish: "Error publishing the draw.",
     },
     login: {
-      notice: "Accounts and passwords are stored in Supabase authentication (hashed, outside our database). Coach/referee/admin access is granted later by the club administrator.",
+      notice: "Coach/referee/admin access is granted later by the club administrator.",
       signIn: "Log in",
       signUp: "Create account",
       email: "Email",
@@ -677,7 +675,6 @@ export const translations = {
     },
     booking: {
       title: "Platzbuchung",
-      subtitle: "Spieler sehen und buchen Termine für die nächsten 7 Tage, Trainer für die nächsten 14 Tage.",
       dayNames: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
       dayNamesLong: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
       monthNamesShort: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
@@ -812,7 +809,7 @@ export const translations = {
       errPublish: "Fehler beim Veröffentlichen der Auslosung.",
     },
     login: {
-      notice: "Konten und Passwörter werden in der Supabase-Authentifizierung gespeichert (gehasht, außerhalb unserer Datenbank). Trainer-/Schiedsrichter-/Admin-Zugriff wird später vom Vereinsadministrator vergeben.",
+      notice: "Trainer-/Schiedsrichter-/Admin-Zugriff wird später vom Vereinsadministrator vergeben.",
       signIn: "Anmelden",
       signUp: "Konto erstellen",
       email: "E-Mail",
