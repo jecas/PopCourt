@@ -1,4 +1,4 @@
-# PopCourt
+# Teniski i padel tereni
 
 Sajt teniskog centra PopCourt — rezultati uživo, žreb turnira, rezervacija terena i cenovnik.
 Frontend: React + Vite. Backend: Supabase (Postgres baza, autentikacija, realtime).
