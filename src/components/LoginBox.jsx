@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { LogIn, MailCheck } from "lucide-react";
 import { TOKENS, card } from "../constants";
+import { useLang } from "../lib/i18n.jsx";
 
 export default function LoginBox({ onSignIn, onSignUp }) {
+  const { t } = useLang();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,12 +16,12 @@ export default function LoginBox({ onSignIn, onSignUp }) {
 
   const submitLogin = async () => {
     setErr("");
-    if (!email.trim() || !password) { setErr("Popunite email i lozinku."); return; }
+    if (!email.trim() || !password) { setErr(t("login.errFillEmailPass")); return; }
     setBusy(true);
     try {
       await onSignIn({ email, password });
     } catch (e) {
-      setErr(e.message === "Invalid login credentials" ? "Pogrešan email ili lozinka (ili nalog još nije potvrđen preko mejla)." : e.message);
+      setErr(e.message === "Invalid login credentials" ? t("login.errWrongCreds") : e.message);
     } finally {
       setBusy(false);
     }
@@ -27,18 +29,24 @@ export default function LoginBox({ onSignIn, onSignUp }) {
 
   const submitRegister = async () => {
     setErr("");
-    if (!email.trim() || !password || !fullName.trim()) { setErr("Popunite sva polja."); return; }
-    if (password.length < 6) { setErr("Lozinka mora imati bar 6 karaktera."); return; }
-    if (password !== password2) { setErr("Lozinke se ne poklapaju."); return; }
+    if (!email.trim() || !password || !fullName.trim()) { setErr(t("login.errFillAll")); return; }
+    if (password.length < 6) { setErr(t("login.errPwLen")); return; }
+    if (password !== password2) { setErr(t("login.errPwMatch")); return; }
     setBusy(true);
     try {
       await onSignUp({ email, password, fullName });
       setJustRegistered(true);
     } catch (e) {
-      setErr(e.message.includes("already registered") ? "Nalog sa tim mejlom već postoji." : e.message);
+      setErr(e.message.includes("already registered") ? t("login.errEmailTaken") : e.message);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (busy) return;
+    mode === "login" ? submitLogin() : submitRegister();
   };
 
   if (justRegistered) {
@@ -46,52 +54,52 @@ export default function LoginBox({ onSignIn, onSignUp }) {
       <div style={{ ...card, maxWidth: 380 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: TOKENS.green }}>
           <MailCheck size={20} />
-          <strong style={{ fontSize: 15 }}>Proveri svoj mejl</strong>
+          <strong style={{ fontSize: 15 }}>{t("login.checkEmailTitle")}</strong>
         </div>
         <p style={{ fontSize: 13, color: "#6B6A63", margin: 0 }}>
-          Poslali smo ti mejl za potvrdu naloga na <strong>{email}</strong>. Klikni na link u mejlu, pa se vrati ovde i uloguj se.
+          {t("login.checkEmailBody")(email)}
         </p>
         <button onClick={() => { setJustRegistered(false); setMode("login"); setPassword(""); setPassword2(""); }} style={{ marginTop: 14, background: "none", border: "none", color: TOKENS.green, fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-          Nazad na prijavu
+          {t("login.backToLogin")}
         </button>
       </div>
     );
   }
 
   return (
-    <div style={{ ...card, maxWidth: 380 }}>
+    <form onSubmit={handleSubmit} style={{ ...card, maxWidth: 380 }}>
       <p style={{ fontSize: 13, color: "#6B6A63", margin: "0 0 12px" }}>
-        Nalozi i lozinke se čuvaju u Supabase autentikaciji (heširano, van naše baze). Trener/sudijski/admin pristup dodeljuje administrator kluba naknadno.
+        {t("login.notice")}
       </p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => { setMode("login"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "login" ? TOKENS.green : TOKENS.line}`, background: mode === "login" ? "#E7EFEA" : "#fff", color: mode === "login" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          Prijavi se
+        <button type="button" onClick={() => { setMode("login"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "login" ? TOKENS.green : TOKENS.line}`, background: mode === "login" ? "#E7EFEA" : "#fff", color: mode === "login" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          {t("login.signIn")}
         </button>
-        <button onClick={() => { setMode("register"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "register" ? TOKENS.green : TOKENS.line}`, background: mode === "register" ? "#E7EFEA" : "#fff", color: mode === "register" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          Napravi nalog
+        <button type="button" onClick={() => { setMode("register"); setErr(""); }} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${mode === "register" ? TOKENS.green : TOKENS.line}`, background: mode === "register" ? "#E7EFEA" : "#fff", color: mode === "register" ? TOKENS.green : TOKENS.ink, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          {t("login.signUp")}
         </button>
       </div>
 
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Email</label>
-      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="npr. ana@primer.com"
+      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.email")}</label>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("login.emailPlaceholder")}
         style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
 
       {mode === "register" && (
         <>
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Ime i prezime</label>
-          <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="npr. Ana Anić"
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.fullName")}</label>
+          <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t("login.fullNamePlaceholder")}
             style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
         </>
       )}
 
-      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Lozinka</label>
+      <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.password")}</label>
       <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
         style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
 
       {mode === "register" && (
         <>
-          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Ponovi lozinku</label>
+          <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>{t("login.password2")}</label>
           <input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} placeholder="••••••••"
             style={{ width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 }} />
         </>
@@ -99,9 +107,9 @@ export default function LoginBox({ onSignIn, onSignUp }) {
 
       {err && <p style={{ color: TOKENS.clay, fontSize: 13, marginBottom: 10 }}>{err}</p>}
 
-      <button disabled={busy} onClick={mode === "login" ? submitLogin : submitRegister} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: TOKENS.green, color: "#fff", border: "none", padding: "10px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
-        <LogIn size={14} /> {busy ? "Sačekajte…" : mode === "login" ? "Uloguj se" : "Napravi nalog i uloguj se"}
+      <button type="submit" disabled={busy} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: TOKENS.green, color: "#fff", border: "none", padding: "10px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>
+        <LogIn size={14} /> {busy ? t("login.wait") : mode === "login" ? t("login.submitSignIn") : t("login.submitSignUp")}
       </button>
-    </div>
+    </form>
   );
 }
