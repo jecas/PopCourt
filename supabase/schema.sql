@@ -26,7 +26,11 @@ security definer set search_path = public
 as $$
 begin
   if (new.credits is distinct from old.credits or new.role is distinct from old.role) then
-    if not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
+    -- book_court/cancel_booking postavljaju ovu session promenljivu kad menjaju
+    -- SOPSTVENE kredite korisnika u sklopu rezervacije/otkazivanja — to nije
+    -- isto sto i korisnik koji sebi rucno menja kredite/ulogu.
+    if coalesce(current_setting('popcourt.credit_bypass', true), '') <> 'on'
+       and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
       raise exception 'Samo admin moze da menja kredite ili ulogu.';
     end if;
   end if;
@@ -99,6 +103,26 @@ insert into public.courts (name, sport, sort_order) values
   ('Padel 2', 'Padel', 7);
 
 -- ============================================================
+-- CENOVNIK (cena po satu, po sportu i vremenskoj zoni u toku dana —
+-- ovo određuje koliko se kredita skida pri rezervaciji, admin ga menja
+-- iz "Cenovnik" strane)
+-- ============================================================
+create table public.price_rules (
+  id uuid primary key default gen_random_uuid(),
+  sport text not null check (sport in ('Tenis', 'Padel')),
+  start_hour numeric not null,
+  end_hour numeric not null,
+  price_per_hour numeric(6, 2) not null,
+  sort_order int not null default 0
+);
+
+insert into public.price_rules (sport, start_hour, end_hour, price_per_hour, sort_order) values
+  ('Tenis', 7, 17, 1, 1),
+  ('Tenis', 17, 24, 1.2, 2),
+  ('Padel', 7, 17, 1, 1),
+  ('Padel', 17, 24, 1.2, 2);
+
+-- ============================================================
 -- MATCHES (rezultati uživo)
 -- ============================================================
 create table public.matches (
@@ -141,6 +165,7 @@ create table public.bookings (
   start_hour numeric(4, 1) not null check (start_hour >= 8 and start_hour < 22),
   duration numeric(3, 1) not null check (duration in (1, 1.5, 2)),
   user_id uuid not null references public.profiles(id) on delete cascade,
+  credits_charged numeric(6, 2) not null,
   created_at timestamptz not null default now(),
   constraint valid_slot check (start_hour = floor(start_hour * 2) / 2),
   constraint fits_before_close check (start_hour + duration <= 22),
@@ -161,6 +186,7 @@ alter table public.courts enable row level security;
 alter table public.matches enable row level security;
 alter table public.draws enable row level security;
 alter table public.bookings enable row level security;
+alter table public.price_rules enable row level security;
 
 -- club_settings
 create policy "podesavanja su javno vidljiva"
@@ -237,6 +263,65 @@ create policy "ulogovani vide sve rezervacije"
   on public.bookings for select
   using (auth.role() = 'authenticated');
 
+-- price_rules — cenovnik je javno vidljiv, menja ga samo admin
+create policy "cenovnik je javno vidljiv"
+  on public.price_rules for select
+  using (true);
+
+create policy "admin menja cenovnik"
+  on public.price_rules for all
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+-- Sabira cenu rezervacije pola sata po pola sata (svaki pola sata se
+-- naplaćuje po ceni zone kojoj pripada) — koristi je book_court, i može
+-- se pozvati sa klijenta za prikaz cene pre rezervacije.
+create function public.compute_booking_price(p_sport text, p_start_hour numeric, p_duration numeric)
+returns numeric
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_total numeric := 0;
+  v_slot numeric;
+  v_rate numeric;
+begin
+  v_slot := p_start_hour;
+  while v_slot < p_start_hour + p_duration loop
+    select price_per_hour into v_rate
+      from public.price_rules
+      where sport = p_sport and v_slot >= start_hour and v_slot < end_hour
+      order by sort_order limit 1;
+    if v_rate is null then
+      raise exception 'Nema definisane cene za % u terminu %h.', p_sport, v_slot;
+    end if;
+    v_total := v_total + v_rate * 0.5;
+    v_slot := v_slot + 0.5;
+  end loop;
+  return v_total;
+end;
+$$;
+
+-- Kad admin otkaže rezervaciju NEKOM DRUGOM korisniku, ovde se upiše red —
+-- to je jedini signal (osim same DELETE operacije) da treba poslati mejl
+-- vlasniku termina. Database Webhook na INSERT ovde pokreće Edge Function
+-- koja šalje mejl (vidi supabase/functions/notify-cancelled-booking).
+create table public.admin_cancellation_notices (
+  id uuid primary key default gen_random_uuid(),
+  booking_user_id uuid not null references public.profiles(id) on delete cascade,
+  court_id int,
+  booking_date date,
+  start_hour numeric,
+  duration numeric,
+  cancelled_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_cancellation_notices enable row level security;
+-- Namerno bez select/insert/update/delete policy za obične korisnike —
+-- ovoj tabeli pristupaju samo cancel_booking() (security definer) i
+-- Edge Function preko service role ključa.
+
 create function public.book_court(
   p_court_id int,
   p_booking_date date,
@@ -249,25 +334,45 @@ security definer set search_path = public
 as $$
 declare
   v_credits numeric;
+  v_sport text;
+  v_price numeric;
+  v_is_admin boolean;
   v_booking public.bookings;
 begin
-  if (p_booking_date + (p_start_hour || ' hours')::interval) - now() < interval '1 hour' then
+  select exists(select 1 from public.profiles where id = auth.uid() and role = 'admin') into v_is_admin;
+
+  -- Admin rezerviše bez ograničenja roka i bez trošenja kredita.
+  if not v_is_admin and (p_booking_date + (p_start_hour || ' hours')::interval) at time zone 'Europe/Belgrade' - now() < interval '1 hour' then
     raise exception 'Termin mora biti rezervisan najkasnije 1h unapred.';
   end if;
 
-  select credits into v_credits from public.profiles where id = auth.uid() for update;
-  if v_credits is null then
-    raise exception 'Profil nije pronađen.';
-  end if;
-  if v_credits < p_duration then
-    raise exception 'Nemate dovoljno kredita za ovaj termin (potrebno % , dostupno %).', p_duration, v_credits;
+  select sport into v_sport from public.courts where id = p_court_id;
+  if v_sport is null then
+    raise exception 'Teren nije pronađen.';
   end if;
 
-  insert into public.bookings (court_id, booking_date, start_hour, duration, user_id)
-  values (p_court_id, p_booking_date, p_start_hour, p_duration, auth.uid())
+  if v_is_admin then
+    v_price := 0;
+  else
+    v_price := public.compute_booking_price(v_sport, p_start_hour, p_duration);
+
+    select credits into v_credits from public.profiles where id = auth.uid() for update;
+    if v_credits is null then
+      raise exception 'Profil nije pronađen.';
+    end if;
+    if v_credits < v_price then
+      raise exception 'Nemate dovoljno kredita za ovaj termin (potrebno % , dostupno %).', v_price, v_credits;
+    end if;
+  end if;
+
+  insert into public.bookings (court_id, booking_date, start_hour, duration, user_id, credits_charged)
+  values (p_court_id, p_booking_date, p_start_hour, p_duration, auth.uid(), v_price)
   returning * into v_booking;
 
-  update public.profiles set credits = credits - p_duration where id = auth.uid();
+  if not v_is_admin then
+    perform set_config('popcourt.credit_bypass', 'on', true);
+    update public.profiles set credits = credits - v_price where id = auth.uid();
+  end if;
 
   return v_booking;
 end;
@@ -280,20 +385,31 @@ security definer set search_path = public
 as $$
 declare
   v_booking public.bookings;
+  v_is_admin boolean;
 begin
+  select exists(select 1 from public.profiles where id = auth.uid() and role = 'admin') into v_is_admin;
+
   select * into v_booking from public.bookings where id = p_booking_id;
   if v_booking is null then
     raise exception 'Rezervacija ne postoji.';
   end if;
-  if v_booking.user_id <> auth.uid() then
+  -- Admin otkazuje bilo čiju rezervaciju, bez obzira na rok.
+  if not v_is_admin and v_booking.user_id <> auth.uid() then
     raise exception 'Možete otkazati samo svoju rezervaciju.';
   end if;
-  if (v_booking.booking_date + (v_booking.start_hour || ' hours')::interval) - now() < interval '24 hours' then
+  if not v_is_admin and (v_booking.booking_date + (v_booking.start_hour || ' hours')::interval) at time zone 'Europe/Belgrade' - now() < interval '24 hours' then
     raise exception 'Termin se ne može otkazati manje od 24h unapred.';
   end if;
 
+  if v_is_admin and v_booking.user_id <> auth.uid() then
+    insert into public.admin_cancellation_notices (booking_user_id, court_id, booking_date, start_hour, duration, cancelled_by)
+    values (v_booking.user_id, v_booking.court_id, v_booking.booking_date, v_booking.start_hour, v_booking.duration, auth.uid());
+  end if;
+
   delete from public.bookings where id = p_booking_id;
-  update public.profiles set credits = credits + v_booking.duration where id = auth.uid();
+  -- Kredit se uvek vraća VLASNIKU termina, ne onome ko je otkazao (bitno kad admin otkazuje tuđu rezervaciju).
+  perform set_config('popcourt.credit_bypass', 'on', true);
+  update public.profiles set credits = credits + v_booking.credits_charged where id = v_booking.user_id;
 end;
 $$;
 
@@ -373,6 +489,7 @@ alter publication supabase_realtime add table public.matches;
 alter publication supabase_realtime add table public.bookings;
 alter publication supabase_realtime add table public.draws;
 alter publication supabase_realtime add table public.club_settings;
+alter publication supabase_realtime add table public.price_rules;
 
 -- ============================================================
 -- Primer mečeva za probu (opciono, obriši ako ne trebaju)
