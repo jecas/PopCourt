@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Coins, KeyRound } from "lucide-react";
 import { TOKENS, card } from "../constants";
+import { formatDinars } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
 
 const inputStyle = { width: "100%", border: `1px solid ${TOKENS.line}`, borderRadius: 8, padding: "9px 10px", fontSize: 14, boxSizing: "border-box", marginBottom: 12 };
@@ -61,7 +62,7 @@ export default function MyAccount({ profile, onSaveProfile, onChangePassword }) 
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 460 }}>
       <div style={{ ...card, display: "flex", alignItems: "center", gap: 8, background: "#E7EFEA", border: `1px solid ${TOKENS.green}` }}>
         <Coins size={18} color={TOKENS.green} />
-        <span style={{ fontSize: 14, fontWeight: 700, color: TOKENS.green }}>{t("myAccount.credits")}: {profile.credits ?? 0}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: TOKENS.green }}>{t("myAccount.credits")}: {formatDinars(profile.balance ?? 0)} din</span>
       </div>
 
       <form onSubmit={saveInfo} style={card}>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { TOKENS, card } from "../constants";
-import { dateKey, hourLabel, hoursUntil } from "../lib/utils";
+import { dateKey, hourLabel, hoursUntil, formatDinars } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
 import * as api from "../lib/api";
 
@@ -50,7 +50,7 @@ export default function MyBookings({ user, onCancel }) {
             <div key={b.id} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{b.courts?.name}</div>
-                <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)} · {t("booking.priceLabel")(b.credits_charged).replace("/h", "")}</div>
+                <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)} · {formatDinars(b.amount_charged)} din</div>
               </div>
               <button onClick={() => cancel(b)} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 7, border: `1px solid ${TOKENS.clay}`, background: "#fff", color: TOKENS.clay, cursor: "pointer" }}>
                 <X size={12} /> {t("myBookings.cancel")}
@@ -68,7 +68,7 @@ export default function MyBookings({ user, onCancel }) {
           {history.map((b) => (
             <div key={b.id} style={{ ...card, padding: "12px 16px", opacity: 0.7 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{b.courts?.name}</div>
-              <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)}</div>
+              <div style={{ fontSize: 12, color: "#8B8A80" }}>{b.booking_date} · {hourLabel(b.start_hour)}–{hourLabel(b.start_hour + b.duration)} · {formatDinars(b.amount_charged)} din</div>
             </div>
           ))}
         </div>

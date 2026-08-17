@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Coins } from "lucide-react";
 import { TOKENS, OPEN_HOUR, CLOSE_HOUR, DURATIONS } from "../constants";
-import { dateKey, fmtLongDate, hourLabel, hoursUntil, isSameDay, priceForSlot, computeBookingPrice } from "../lib/utils";
+import { dateKey, fmtLongDate, hourLabel, hoursUntil, isSameDay, priceForSlot, computeBookingPrice, formatDinars } from "../lib/utils";
 import { useLang } from "../lib/i18n.jsx";
 
 const ROW_HEIGHT = 46;
@@ -48,7 +48,7 @@ export default function BookingCalendar({ user, courts, bookings, priceRules, on
     if (!isAdmin) {
       const price = computeBookingPrice(priceRules, sport, startHour, duration);
       if (price == null) { setMsg(t("booking.errNoPrice")); return; }
-      if ((user.credits ?? 0) < price) { setMsg(t("booking.errInsufficientCredits")); return; }
+      if ((user.balance ?? 0) < price) { setMsg(t("booking.errInsufficientCredits")); return; }
     }
     setBusy(true);
     try {
@@ -100,7 +100,7 @@ export default function BookingCalendar({ user, courts, bookings, priceRules, on
           <button onClick={() => setSport("Padel")} style={sportBtnStyle(sport === "Padel")}>{t("booking.sportPadel")}</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: TOKENS.green }}>
-          <Coins size={15} /> {isAdmin ? t("booking.adminNoCredits") : `${t("booking.creditsLabel")}: ${user.credits ?? 0}`}
+          <Coins size={15} /> {isAdmin ? t("booking.adminNoCredits") : `${t("booking.creditsLabel")}: ${formatDinars(user.balance ?? 0)} din`}
         </div>
       </div>
 
@@ -145,7 +145,7 @@ export default function BookingCalendar({ user, courts, bookings, priceRules, on
               return (
                 <div key={h} style={{ height: ROW_HEIGHT, position: "relative", top: -6 }}>
                   <div style={{ fontSize: 11, color: "#8B8A80" }}>{String(h).padStart(2, "0")}h</div>
-                  {price != null && <div style={{ fontSize: 10, color: TOKENS.clay, fontWeight: 600 }}>{t("booking.priceLabel")(price)}</div>}
+                  {price != null && <div style={{ fontSize: 10, color: TOKENS.clay, fontWeight: 600 }}>{t("booking.priceLabel")(formatDinars(price))}</div>}
                 </div>
               );
             })}
@@ -218,7 +218,7 @@ const navBtnStyle = {
 
 function mapError(message, t) {
   if (!message) return message;
-  if (message.includes("Nemate dovoljno kredita")) return t("booking.errInsufficientCredits");
+  if (message.includes("Nemate dovoljno sredstava")) return t("booking.errInsufficientCredits");
   if (message.includes("najkasnije 1h")) return t("booking.errLeadTime");
   if (message.includes("24h")) return t("booking.errCancelWindow");
   if (message.includes("exclusion") || message.includes("conflicting key")) return t("booking.errConflict");

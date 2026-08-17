@@ -6,21 +6,21 @@ import * as api from "../lib/api";
 
 function UserRow({ u, onSave }) {
   const { t } = useLang();
-  const [credits, setCredits] = useState(u.credits);
+  const [balance, setBalance] = useState(u.balance);
   const [role, setRole] = useState(u.role);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = Number(credits) !== Number(u.credits) || role !== u.role;
+  const dirty = Number(balance) !== Number(u.balance) || role !== u.role;
 
   useEffect(() => {
-    setCredits(u.credits);
+    setBalance(u.balance);
     setRole(u.role);
-  }, [u.credits, u.role]);
+  }, [u.balance, u.role]);
 
   const save = async () => {
     setBusy(true);
     try {
-      await onSave(u.id, { credits: Number(credits), role });
+      await onSave(u.id, { balance: Number(balance), role });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -41,8 +41,8 @@ function UserRow({ u, onSave }) {
         </select>
       </td>
       <td style={{ padding: "8px 10px" }}>
-        <input type="number" step="0.5" value={credits} onChange={(e) => setCredits(e.target.value)}
-          style={{ width: 70, border: `1px solid ${TOKENS.line}`, borderRadius: 6, padding: "5px 6px", fontSize: 12.5 }} />
+        <input type="number" step="50" value={balance} onChange={(e) => setBalance(e.target.value)}
+          style={{ width: 90, border: `1px solid ${TOKENS.line}`, borderRadius: 6, padding: "5px 6px", fontSize: 12.5 }} /> din
       </td>
       <td style={{ padding: "8px 10px" }}>
         {dirty && (
