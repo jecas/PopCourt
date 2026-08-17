@@ -58,6 +58,14 @@ export function computeBookingPrice(priceRules, sport, startHour, duration) {
   return Math.round(total * 100) / 100;
 }
 
+// Formatira iznos u dinarima na srpski način: tačka razdvaja hiljade, zarez decimale.
+export function formatDinars(n) {
+  const rounded = Math.round((n ?? 0) * 100) / 100;
+  const [whole, decimals] = rounded.toString().split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimals ? `${grouped},${decimals}` : grouped;
+}
+
 export function buildBracket(players) {
   let size = 2;
   while (size < players.length) size *= 2;

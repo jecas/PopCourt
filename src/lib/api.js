@@ -72,9 +72,9 @@ export async function fetchAllProfiles() {
   return data;
 }
 
-export async function adminUpdateProfile(id, { credits, role }) {
+export async function adminUpdateProfile(id, { balance, role }) {
   const patch = {};
-  if (credits !== undefined) patch.credits = credits;
+  if (balance !== undefined) patch.balance = balance;
   if (role !== undefined) patch.role = role;
   const { error } = await supabase.from("profiles").update(patch).eq("id", id);
   if (error) throw error;
@@ -109,24 +109,6 @@ export async function fetchPriceRules() {
   const { data, error } = await supabase.from("price_rules").select("*").order("sport").order("sort_order");
   if (error) throw error;
   return data;
-}
-
-// Zamenjuje sva pravila za dati sport novom listom (admin uređuje celu zonsku tabelu odjednom).
-export async function savePriceRules(sport, rules) {
-  const { error: delErr } = await supabase.from("price_rules").delete().eq("sport", sport);
-  if (delErr) throw delErr;
-  if (rules.length > 0) {
-    const { error: insErr } = await supabase.from("price_rules").insert(
-      rules.map((r, i) => ({
-        sport,
-        start_hour: r.startHour,
-        end_hour: r.endHour,
-        price_per_hour: r.pricePerHour,
-        sort_order: i + 1,
-      }))
-    );
-    if (insErr) throw insErr;
-  }
 }
 
 export function subscribePriceRules(onChange) {
@@ -271,7 +253,7 @@ export async function fetchMyPastBookings(userId, before) {
 }
 
 // Rezervacija i otkazivanje idu kroz Postgres funkcije (book_court/cancel_booking) koje
-// atomicno proveravaju i troše/vraćaju kredite — direktan insert/delete na tabeli je odbijen.
+// atomicno proveravaju i troše/vraćaju novac sa računa — direktan insert/delete na tabeli je odbijen.
 export async function createBooking({ courtId, bookingDate, startHour, duration }) {
   const { data, error } = await supabase.rpc("book_court", {
     p_court_id: courtId,
