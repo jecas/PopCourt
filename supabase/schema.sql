@@ -12,26 +12,26 @@ create table public.profiles (
   username text unique not null,
   full_name text not null,
   role text not null default 'player' check (role in ('player', 'coach', 'referee', 'admin')),
-  credits numeric(6, 1) not null default 0,
+  balance numeric(10, 2) not null default 0,
   phone text,
   birth_date date,
   created_at timestamptz not null default now()
 );
 
--- Zaštita: kredite i ulogu sme da menja SAMO admin, bez obzira ko šalje UPDATE
+-- Zaštita: stanje na računu i ulogu sme da menja SAMO admin, bez obzira ko šalje UPDATE
 create function public.protect_privileged_profile_fields()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  if (new.credits is distinct from old.credits or new.role is distinct from old.role) then
+  if (new.balance is distinct from old.balance or new.role is distinct from old.role) then
     -- book_court/cancel_booking postavljaju ovu session promenljivu kad menjaju
-    -- SOPSTVENE kredite korisnika u sklopu rezervacije/otkazivanja — to nije
-    -- isto sto i korisnik koji sebi rucno menja kredite/ulogu.
+    -- SOPSTVENO stanje korisnika u sklopu rezervacije/otkazivanja — to nije
+    -- isto sto i korisnik koji sebi rucno menja stanje/ulogu.
     if coalesce(current_setting('popcourt.credit_bypass', true), '') <> 'on'
        and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin') then
-      raise exception 'Samo admin moze da menja kredite ili ulogu.';
+      raise exception 'Samo admin moze da menja stanje racuna ili ulogu.';
     end if;
   end if;
   return new;
@@ -103,24 +103,24 @@ insert into public.courts (name, sport, sort_order) values
   ('Padel 2', 'Padel', 7);
 
 -- ============================================================
--- CENOVNIK (cena po satu, po sportu i vremenskoj zoni u toku dana —
--- ovo određuje koliko se kredita skida pri rezervaciji, admin ga menja
--- iz "Cenovnik" strane)
+-- CENOVNIK (cena po satu u dinarima, po sportu i vremenskoj zoni u toku
+-- dana — ovo određuje koliko se skida sa računa pri rezervaciji, admin
+-- ga menja iz "Cenovnik" strane)
 -- ============================================================
 create table public.price_rules (
   id uuid primary key default gen_random_uuid(),
   sport text not null check (sport in ('Tenis', 'Padel')),
   start_hour numeric not null,
   end_hour numeric not null,
-  price_per_hour numeric(6, 2) not null,
+  price_per_hour numeric(8, 2) not null,
   sort_order int not null default 0
 );
 
 insert into public.price_rules (sport, start_hour, end_hour, price_per_hour, sort_order) values
-  ('Tenis', 7, 17, 1, 1),
-  ('Tenis', 17, 24, 1.2, 2),
-  ('Padel', 7, 17, 1, 1),
-  ('Padel', 17, 24, 1.2, 2);
+  ('Tenis', 7, 17, 800, 1),
+  ('Tenis', 17, 24, 900, 2),
+  ('Padel', 7, 17, 1000, 1),
+  ('Padel', 17, 24, 1200, 2);
 
 -- ============================================================
 -- MATCHES (rezultati uživo)
@@ -165,7 +165,7 @@ create table public.bookings (
   start_hour numeric(4, 1) not null check (start_hour >= 8 and start_hour < 22),
   duration numeric(3, 1) not null check (duration in (1, 1.5, 2)),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  credits_charged numeric(6, 2) not null,
+  amount_charged numeric(10, 2) not null,
   created_at timestamptz not null default now(),
   constraint valid_slot check (start_hour = floor(start_hour * 2) / 2),
   constraint fits_before_close check (start_hour + duration <= 22),
@@ -333,7 +333,7 @@ language plpgsql
 security definer set search_path = public
 as $$
 declare
-  v_credits numeric;
+  v_balance numeric;
   v_sport text;
   v_price numeric;
   v_is_admin boolean;
@@ -341,7 +341,7 @@ declare
 begin
   select exists(select 1 from public.profiles where id = auth.uid() and role = 'admin') into v_is_admin;
 
-  -- Admin rezerviše bez ograničenja roka i bez trošenja kredita.
+  -- Admin rezerviše bez ograničenja roka i bez trošenja novca sa računa.
   if not v_is_admin and (p_booking_date + (p_start_hour || ' hours')::interval) at time zone 'Europe/Belgrade' - now() < interval '1 hour' then
     raise exception 'Termin mora biti rezervisan najkasnije 1h unapred.';
   end if;
@@ -356,22 +356,22 @@ begin
   else
     v_price := public.compute_booking_price(v_sport, p_start_hour, p_duration);
 
-    select credits into v_credits from public.profiles where id = auth.uid() for update;
-    if v_credits is null then
+    select balance into v_balance from public.profiles where id = auth.uid() for update;
+    if v_balance is null then
       raise exception 'Profil nije pronađen.';
     end if;
-    if v_credits < v_price then
-      raise exception 'Nemate dovoljno kredita za ovaj termin (potrebno % , dostupno %).', v_price, v_credits;
+    if v_balance < v_price then
+      raise exception 'Nemate dovoljno sredstava na računu za ovaj termin (potrebno % din, dostupno % din).', v_price, v_balance;
     end if;
   end if;
 
-  insert into public.bookings (court_id, booking_date, start_hour, duration, user_id, credits_charged)
+  insert into public.bookings (court_id, booking_date, start_hour, duration, user_id, amount_charged)
   values (p_court_id, p_booking_date, p_start_hour, p_duration, auth.uid(), v_price)
   returning * into v_booking;
 
   if not v_is_admin then
     perform set_config('popcourt.credit_bypass', 'on', true);
-    update public.profiles set credits = credits - v_price where id = auth.uid();
+    update public.profiles set balance = balance - v_price where id = auth.uid();
   end if;
 
   return v_booking;
@@ -407,9 +407,9 @@ begin
   end if;
 
   delete from public.bookings where id = p_booking_id;
-  -- Kredit se uvek vraća VLASNIKU termina, ne onome ko je otkazao (bitno kad admin otkazuje tuđu rezervaciju).
+  -- Novac se uvek vraća VLASNIKU termina, ne onome ko je otkazao (bitno kad admin otkazuje tuđu rezervaciju).
   perform set_config('popcourt.credit_bypass', 'on', true);
-  update public.profiles set credits = credits + v_booking.credits_charged where id = v_booking.user_id;
+  update public.profiles set balance = balance + v_booking.amount_charged where id = v_booking.user_id;
 end;
 $$;
 
