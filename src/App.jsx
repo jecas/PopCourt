@@ -84,7 +84,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [session]);
 
-  const user = session?.user && profile ? { id: session.user.id, name: profile.full_name, role: profile.role, credits: profile.credits } : null;
+  const user = session?.user && profile ? { id: session.user.id, name: profile.full_name, role: profile.role, balance: profile.balance } : null;
   const canScoreMatches = profile?.role === "referee" || profile?.role === "admin";
   const canManageDraw = profile?.role === "coach" || profile?.role === "admin";
   const isAdmin = profile?.role === "admin";
@@ -195,11 +195,6 @@ export default function App() {
   const handleSaveSettings = async ({ name, address, phone }) => {
     await api.updateClubSettings({ name, address, phone });
     refreshSettings();
-  };
-
-  const handleSaveZones = async (sport, rules) => {
-    await api.savePriceRules(sport, rules);
-    refreshPriceRules();
   };
 
   const handleSaveProfile = async (patch) => {
@@ -419,7 +414,7 @@ export default function App() {
         {tab === "prices" && (
           <section>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px" }}>{t("prices.title")}</h2>
-            <PriceList priceRules={priceRules} isAdmin={isAdmin} onSaveZones={handleSaveZones} />
+            <PriceList />
           </section>
         )}
 
