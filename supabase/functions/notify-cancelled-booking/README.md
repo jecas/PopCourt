@@ -18,19 +18,23 @@ ne uradiš, pošiljalac ostaje `onboarding@resend.dev` i Resend dozvoljava
 slanje samo na tvoju sopstvenu (verifikovanu) adresu — dovoljno za
 testiranje, ne i za prave članove kluba.
 
-## 2. Instaliraj Supabase CLI i poveži projekat
+## 2. Poveži projekat sa Supabase CLI
 
-Na svom računaru (jednom):
+**Ne instaliraj `supabase` preko `npm install -g`** — Supabase to zvanično
+ne podržava, komanda ume da "prođe" instalaciju ali `supabase` posle
+ostane nepoznata komanda (`command not found`). Umesto toga koristi
+`npx` — stavi `npx ` ispred svake komande, ništa se globalno ne
+instalira, i uvek radi:
 
 ```bash
-npm install -g supabase
-supabase login
+npx supabase login
 ```
 
-U folderu projekta:
+Otvoriće se browser da se prijaviš na Supabase nalog. U folderu projekta
+(`.../PopCourt`, ne u `supabase` podfolderu):
 
 ```bash
-supabase link --project-ref <tvoj-project-ref>
+npx supabase link --project-ref <tvoj-project-ref>
 ```
 
 `<tvoj-project-ref>` nalaziš u Supabase dashboard-u → Project Settings →
@@ -39,8 +43,8 @@ General → Reference ID.
 ## 3. Postavi tajne (secrets) za funkciju
 
 ```bash
-supabase secrets set RESEND_API_KEY=re_xxxxxxxx
-supabase secrets set NOTICE_SENDER_EMAIL=onboarding@resend.dev
+npx supabase secrets set RESEND_API_KEY=re_xxxxxxxx
+npx supabase secrets set NOTICE_SENDER_EMAIL=onboarding@resend.dev
 ```
 
 (Kad potvrdiš svoj domen u Resend-u, promeni `NOTICE_SENDER_EMAIL` na
@@ -49,7 +53,7 @@ npr. `obavestenja@tvojklub.rs`.)
 ## 4. Deploy funkcije
 
 ```bash
-supabase functions deploy notify-cancelled-booking
+npx supabase functions deploy notify-cancelled-booking
 ```
 
 ## 5. Napravi Database Webhook
